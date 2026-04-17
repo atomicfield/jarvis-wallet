@@ -9,23 +9,19 @@ if (!admin.apps.length) {
     credential: admin.credential.cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      // .env içindeki \n karakterlerini gerçek satır sonlarına çeviriyoruz
       privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
     }),
   });
 }
 
-// Telegram'dan gelen initData'yı doğrulayan fonksiyon
-function verifyTelegramWebAppData(initData: string): any {
+function verifyTelegramWebAppData(initData: string) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   if (!botToken) throw new Error("Bot token ayarlanmamış.");
 
-  // URL-encoded veriyi parçala
   const urlParams = new URLSearchParams(initData);
   const hash = urlParams.get("hash");
   urlParams.delete("hash");
 
-  // Veriyi alfabetik olarak sırala
   const dataCheckArr: string[] = [];
   urlParams.forEach((value, key) => {
     dataCheckArr.push(`${key}=${value}`);
@@ -54,27 +50,44 @@ export async function POST(request: Request) {
     const { initData } = body;
 
     if (!initData) {
-      return NextResponse.json({ error: "initData eksik" }, { status: 400 });
+      return NextResponse.json({ error: "initData not found." }, { status: 400 });
     }
 
     // 1. Telegram verisini doğrula
     const telegramUser = verifyTelegramWebAppData(initData);
-    const telegramId = telegramUser.id.toString(); // Firebase uid string olmalıdır
+    const telegramId = telegramUser.id.toString();
 
-    // 2. İsteğe bağlı: Firebase tarafında bu kullanıcı için ek kayıt işlemleri yapabilirsiniz 
-    // (Örn: Firestore'a kullanıcının adını/soyadını kaydetmek)
+    const db = admin.firestore();
+    const userRef = db.collection("users").doc(telegramId);
+    const userDoc = await userRef.get();
 
-    // 3. Firebase Custom Token oluştur
+    if (!userDoc.exists) {
+      await userRef.set({
+        telegramId: telegramId,
+        firstName: telegramUser.first_name,
+        lastName: telegramUser.last_name || null,
+        username: telegramUser.username || null,
+        languageCode: telegramUser.language_code || "tr",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastLogin: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } else {
+      await userRef.update({
+        lastLogin: admin.firestore.FieldValue.serverTimestamp(),
+        ısername: telegramUser.username || null,
+        firstName: telegramUser.first_name, 
+        username: telegramUser.username || null,
+      });
+    }
     const customToken = await admin.auth().createCustomToken(telegramId, {
-      // Buraya JWT'ye eklemek istediğiniz özel yetkileri/bilgileri yazabilirsiniz
       provider: "telegram",
     });
 
-    // 4. Token'ı istemciye geri gönder
     return NextResponse.json({ customToken, user: telegramUser });
 
   } catch (error) {
     console.error("Auth Hatası:", error);
-    return NextResponse.json({ error: error?.message ||"Bilinmeyen bir hata oluştu." }, { status: 401 });
+    const errorMessage = error instanceof Error ? error.message : "Bilinmeyen bir hata oluştu.";
+    return NextResponse.json({ error: errorMessage }, { status: 401 });
   }
 }

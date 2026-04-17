@@ -11,7 +11,7 @@ import { removeToken, setToken } from "./actions";
 
 type AuthContextType = {
   currentUser: User | null;
-  loginWithTelegram: (initData: TelegramInitData) => Promise<void>;
+  loginWithTelegram: (initData: string) => Promise<{ success: boolean; error: string | null }>;
   logout: () => Promise<void>;
   customClaims: ParsedToken | null;
 };
@@ -49,26 +49,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await auth.signOut();
   };
 
-  const loginWithTelegram = async (initData:TelegramInitData) => {
+  const loginWithTelegram = async (initData:string) => {
   try {
-    // 1. initData'yı kendi sunucunuza gönderip Custom Token isteyin
     const response = await fetch("/api/auth/telegram", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ initData }),
     });
-
     const data = await response.json();
-
     if (data.customToken) {
-      // 2. Sunucudan gelen token ile Firebase'e giriş yapın
       await signInWithCustomToken(auth, data.customToken);
-      console.log("Firebase girişi başarılı!");
+      return { success: true,error: null };
     } else {
-      console.error("Sunucu token üretemedi.");
+      console.error("Server can't provide custom token:", data.error);
+      return {success: false, error: data.error || "Bilinmeyen bir hata oluştu."};
     }
   } catch (error) {
-    console.error("Telegram ile giriş yapılırken hata:", error);
+    console.error("Error during Telegram login:", error);
+    return {success: false, error: "Giriş yapılırken bir hata oluştu."};
   }
 };
 

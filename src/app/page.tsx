@@ -1,22 +1,29 @@
 "use client";
-import { checkData } from "@/context/actions";
 import { useAuth } from "@/context/auth";
+import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 export default function Home() {
   const auth = useAuth();
+  const router = useRouter(); 
   useEffect(()=>{
-    const data = async()=>{
-    if(typeof window === "undefined") return;
+  const initAuth = async () => {
+    if (typeof window === "undefined") return;
+    
     const WebApp = window?.Telegram?.WebApp;
     const initData = WebApp?.initData;
-    if(!initData) return;
-    await auth?.loginWithTelegram(initData).then(()=>{
-      checkData()
-    });
+    
+    if (!initData) return;
+
+    const result = await auth?.loginWithTelegram(initData);
+    if(result?.success){
+      router.refresh();
+    }else{
+      console.error("Login failed:", result?.error||"Unknown error");
     }
-   data();
-  },[])
+  };
+  initAuth();
+  },[auth,router])
   
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-6 font-sans dark:bg-black">
