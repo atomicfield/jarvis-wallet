@@ -1,4 +1,23 @@
+"use client";
+import { checkData } from "@/context/actions";
+import { useAuth } from "@/context/auth";
+import { useEffect } from "react";
+
 export default function Home() {
+  const auth = useAuth();
+  useEffect(()=>{
+    const data = async()=>{
+    if(typeof window === "undefined") return;
+    const WebApp = window?.Telegram?.WebApp;
+    const initData = WebApp?.initData;
+    if(!initData) return;
+    await auth?.loginWithTelegram(initData).then(()=>{
+      checkData()
+    });
+    }
+   data();
+  },[])
+  
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-6 font-sans dark:bg-black">
       <main className="w-full max-w-3xl rounded-2xl bg-white p-10 shadow-sm dark:bg-zinc-950">
