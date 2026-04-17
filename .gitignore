@@ -30,6 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# local planning transcripts
+2026-04-16-223740-alright-so-were-gonna-build-an-app-for-the-ston.txt
+
 # env files (can opt-in for committing if needed)
 .env*
 
