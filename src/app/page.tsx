@@ -1,89 +1,213 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
+
+import { ChatThread } from "@/components/ChatThread";
+import { JarvisWelcome } from "@/components/JarvisWelcome";
 import { TelegramInit, useTelegram } from "@/components/TelegramInit";
 import { VoiceOrb, type OrbState } from "@/components/VoiceOrb";
-import { ChatThread } from "@/components/ChatThread";
 import { WalletBar } from "@/components/WalletBar";
-import { useVoice } from "@/hooks/useVoice";
 import { useTTS } from "@/hooks/useTTS";
+import { useVoice } from "@/hooks/useVoice";
 import {
   generateWallet,
   loadWalletFromSecureStorage,
   storeWalletInSecureStorage,
 } from "@/lib/ton/wallet-client";
 
+const QUICK_PROMPTS = [
+  "Show my TON wallet balance",
+  "Help me stake my TON safely",
+  "Explain what I can do with Jarvis",
+] as const;
+
+const WELCOME_STORAGE_NAMESPACE = "jarvis:welcome:v1";
+
+function getWelcomeStorageKey(userId?: number) {
+  return `${WELCOME_STORAGE_NAMESPACE}:${userId ?? "guest"}`;
+}
+
+function readLocalWelcomeState(key: string) {
+  try {
+    return window.localStorage.getItem(key) === "seen";
+  } catch {
+    return false;
+  }
+}
+
+function writeLocalWelcomeState(key: string) {
+  try {
+    window.localStorage.setItem(key, "seen");
+  } catch {
+    // Ignore local storage restrictions in privacy modes.
+  }
+}
+
+function readCloudWelcomeState(tg: TelegramWebApp, key: string) {
+  return new Promise<string | null>((resolve) => {
+    try {
+      tg.CloudStorage.getItem(key, (error, value) => {
+        if (error) {
+          console.error("[Welcome] Failed to read Telegram CloudStorage:", error);
+          resolve(null);
+          return;
+        }
+
+        resolve(value ?? null);
+      });
+    } catch (error) {
+      console.error("[Welcome] Telegram CloudStorage read threw:", error);
+      resolve(null);
+    }
+  });
+}
+
+function writeCloudWelcomeState(tg: TelegramWebApp, key: string) {
+  return new Promise<void>((resolve) => {
+    try {
+      tg.CloudStorage.setItem(key, "seen", (error) => {
+        if (error) {
+          console.error("[Welcome] Failed to write Telegram CloudStorage:", error);
+        }
+
+        resolve();
+      });
+    } catch (error) {
+      console.error("[Welcome] Telegram CloudStorage write threw:", error);
+      resolve();
+    }
+  });
+}
+
 function JarvisApp() {
-  const { isReady, isTelegram } = useTelegram();
+  const { isReady, isTelegram, user, authError, authState } = useTelegram();
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [walletBalance] = useState<string | null>(null);
   const [view, setView] = useState<"voice" | "chat">("voice");
   const [orbState, setOrbState] = useState<OrbState>("idle");
   const [textInput, setTextInput] = useState("");
   const [walletLoading, setWalletLoading] = useState(true);
-  const prevMessagesLenRef = useRef(0);
+  const [welcomeMode, setWelcomeMode] = useState<"first" | "returning">("first");
+  const [welcomeReady, setWelcomeReady] = useState(false);
 
-  // Load or create wallet on mount
+  const {
+    transcript,
+    isListening,
+    resetTranscript,
+    startListening,
+    stopListening,
+  } = useVoice();
+  const { speak, stop: stopSpeaking, isSpeaking } = useTTS();
+
   useEffect(() => {
-    if (!isReady) return;
+    if (!isReady) {
+      return;
+    }
+
+    let active = true;
 
     async function initWallet() {
       try {
-        // Try to load existing wallet
-        const stored = await loadWalletFromSecureStorage();
-        if (stored) {
-          setWalletAddress(stored.address);
-          setWalletLoading(false);
+        const storedWallet = await loadWalletFromSecureStorage();
+        if (!active) {
           return;
         }
 
-        // No wallet found — generate a new one
+        if (storedWallet) {
+          setWalletAddress(storedWallet.address);
+          return;
+        }
+
         const wallet = await generateWallet();
-        const stored2 = await storeWalletInSecureStorage(
+        if (!active) {
+          return;
+        }
+
+        const stored = await storeWalletInSecureStorage(
           wallet.mnemonic,
           wallet.address,
         );
 
-        if (stored2) {
-          setWalletAddress(wallet.address);
-          console.log("[Wallet] Created and stored:", wallet.address);
-        } else {
-          console.error("[Wallet] Failed to store wallet");
-          // Still use it for the session
-          setWalletAddress(wallet.address);
+        if (!active) {
+          return;
         }
-      } catch (err) {
-        console.error("[Wallet] Init error:", err);
+
+        if (!stored) {
+          console.error("[Wallet] Failed to store wallet in Telegram SecureStorage");
+        }
+
+        setWalletAddress(wallet.address);
+      } catch (error) {
+        console.error("[Wallet] Init error:", error);
       } finally {
-        setWalletLoading(false);
+        if (active) {
+          setWalletLoading(false);
+        }
       }
     }
 
-    initWallet();
+    void initWallet();
+
+    return () => {
+      active = false;
+    };
   }, [isReady]);
 
-  // AI Chat — v6 API using sendMessage + status
-  const {
-    messages,
-    sendMessage,
-    status,
-    error,
-  } = useChat({
+  useEffect(() => {
+    if (!isReady) {
+      return;
+    }
+
+    let active = true;
+    const key = getWelcomeStorageKey(user?.id);
+    const tg = window.Telegram?.WebApp;
+
+    async function resolveWelcomeState() {
+      let seen = readLocalWelcomeState(key);
+
+      if (!seen && tg && user?.id) {
+        const cloudValue = await readCloudWelcomeState(tg, key);
+        seen = cloudValue === "seen";
+      }
+
+      if (!active) {
+        return;
+      }
+
+      setWelcomeMode(seen ? "returning" : "first");
+      setWelcomeReady(true);
+
+      if (!seen) {
+        writeLocalWelcomeState(key);
+        if (tg && user?.id) {
+          void writeCloudWelcomeState(tg, key);
+        }
+      }
+    }
+
+    void resolveWelcomeState();
+
+    return () => {
+      active = false;
+    };
+  }, [isReady, user?.id]);
+
+  const { messages, sendMessage, status, error } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat",
       body: { walletAddress },
     }),
     onFinish: ({ message }: { message: UIMessage }) => {
-      if (message.role === "assistant") {
-        const textPart = message.parts.find(
-          (p) => p.type === "text" && p.text,
-        );
-        if (textPart && textPart.type === "text" && textPart.text) {
-          speak(textPart.text);
-          setOrbState("speaking");
-        }
+      if (message.role !== "assistant") {
+        return;
+      }
+
+      const textPart = message.parts.find((part) => part.type === "text" && part.text);
+      if (textPart?.type === "text" && textPart.text) {
+        setView("chat");
+        speak(textPart.text);
       }
     },
     onError: () => {
@@ -93,112 +217,83 @@ function JarvisApp() {
   });
 
   const isLoading = status === "submitted" || status === "streaming";
+  const firstName = user?.first_name?.trim() || "there";
+  const inlineNotice = error?.message ?? authError;
+  const displayOrbState: OrbState = isLoading
+    ? "processing"
+    : isSpeaking
+      ? "speaking"
+      : orbState === "processing" || orbState === "speaking"
+        ? "idle"
+        : orbState;
 
-  // Voice
-  const voice = useVoice();
-  const { speak, stop: stopSpeaking, isSpeaking } = useTTS();
-
-  // Update orb state based on speaking
   useEffect(() => {
-    if (isSpeaking) {
-      setOrbState("speaking");
-    } else if (orbState === "speaking") {
-      setOrbState("idle");
+    if (!isListening && transcript && orbState === "listening") {
+      sendMessage({ text: transcript });
+      resetTranscript();
     }
-  }, [isSpeaking, orbState]);
-
-  // Update orb state when loading
-  useEffect(() => {
-    if (isLoading && orbState !== "processing") {
-      setOrbState("processing");
-    } else if (!isLoading && orbState === "processing") {
-      setOrbState("idle");
-    }
-  }, [isLoading, orbState]);
-
-  // When voice transcript finishes, send to agent
-  useEffect(() => {
-    if (
-      !voice.isListening &&
-      voice.transcript &&
-      orbState === "listening"
-    ) {
-      setOrbState("processing");
-      sendMessage({ text: voice.transcript });
-      voice.resetTranscript();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [voice.isListening]);
-
-  // Auto-switch to chat view when messages arrive
-  useEffect(() => {
-    if (messages.length > prevMessagesLenRef.current && view === "voice") {
-      const hasAssistant = messages.some((m) => m.role === "assistant");
-      if (hasAssistant && messages.length > 2) {
-        setView("chat");
-      }
-    }
-    prevMessagesLenRef.current = messages.length;
-  }, [messages, view]);
+  }, [isListening, orbState, resetTranscript, sendMessage, transcript]);
 
   const handleOrbPress = useCallback(() => {
-    if (orbState === "speaking") {
+    if (isSpeaking) {
       stopSpeaking();
       setOrbState("idle");
       return;
     }
 
     if (orbState === "listening") {
-      voice.stopListening();
+      stopListening();
       return;
     }
 
-    if (orbState === "processing") return;
+    if (isLoading) {
+      return;
+    }
 
-    // Start listening
     stopSpeaking();
-    voice.startListening();
+    startListening();
     setOrbState("listening");
-  }, [orbState, voice, stopSpeaking]);
+  }, [isLoading, isSpeaking, orbState, startListening, stopListening, stopSpeaking]);
 
-  const handleTextSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!textInput.trim() || isLoading) return;
-    sendMessage({ text: textInput });
-    setTextInput("");
-  };
+  const handleQuickPrompt = useCallback(
+    (prompt: string) => {
+      if (isLoading) {
+        return;
+      }
 
-  if (!isReady || walletLoading) {
+      stopSpeaking();
+      resetTranscript();
+      setView("chat");
+      sendMessage({ text: prompt });
+    },
+    [isLoading, resetTranscript, sendMessage, stopSpeaking],
+  );
+
+  const handleTextSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (!textInput.trim() || isLoading) {
+        return;
+      }
+
+      sendMessage({ text: textInput });
+      setTextInput("");
+    },
+    [isLoading, sendMessage, textInput],
+  );
+
+  if (!isReady || walletLoading || !welcomeReady) {
     return (
-      <div className="app-container">
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            flex: 1,
-            gap: 12,
-          }}
-        >
-          <div className="voice-orb idle" style={{ width: 60, height: 60 }}>
-            <div className="orb-inner" style={{ transform: "scale(0.5)" }}>
-              <svg
-                width="32"
-                height="32"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                className="orb-spinner"
-              >
-                <path d="M12 2a10 10 0 0 1 10 10" />
-              </svg>
-            </div>
-          </div>
-          <p style={{ color: "var(--text-muted)", fontSize: 13 }}>
-            {walletLoading ? "Loading wallet..." : "Initializing..."}
+      <div className="app-container app-loading-screen">
+        <div className="app-loading-mark">
+          <span className="app-loading-kicker">
+            {!isReady ? "Opening session" : walletLoading ? "Securing wallet" : "Preparing welcome"}
+          </span>
+          <h1 className="app-loading-title">Jarvis</h1>
+          <p className="app-loading-body">
+            {!isReady && "Connecting to Telegram and calibrating the viewport."}
+            {isReady && walletLoading && "Checking Telegram secure storage and loading your wallet."}
+            {isReady && !walletLoading && "Setting your personalized welcome state."}
           </p>
         </div>
       </div>
@@ -207,14 +302,12 @@ function JarvisApp() {
 
   return (
     <div className="app-container">
-      {/* Wallet Status Bar */}
       <WalletBar
         address={walletAddress}
         balance={walletBalance}
-        isConnected={!!walletAddress}
+        isConnected={Boolean(walletAddress)}
       />
 
-      {/* View Toggle */}
       <div className="view-toggle">
         <button
           className={`toggle-btn ${view === "voice" ? "active" : ""}`}
@@ -230,31 +323,61 @@ function JarvisApp() {
         </button>
       </div>
 
-      {/* Voice View */}
-      {view === "voice" && (
-        <VoiceOrb
-          state={orbState}
-          onPress={handleOrbPress}
-          transcript={voice.transcript}
-        />
-      )}
+      {inlineNotice && <div className="app-inline-notice">{inlineNotice}</div>}
 
-      {/* Chat View */}
-      {view === "chat" && (
+      {view === "voice" ? (
+        <section className="voice-view">
+          <JarvisWelcome
+            firstName={firstName}
+            isReturning={welcomeMode === "returning"}
+            isTelegram={isTelegram}
+            isWalletReady={Boolean(walletAddress)}
+            authState={authState}
+            authError={authError}
+          />
+
+          <div className="quick-prompt-row">
+            {QUICK_PROMPTS.map((prompt) => (
+              <button
+                key={prompt}
+                className="quick-prompt-pill"
+                disabled={isLoading}
+                onClick={() => handleQuickPrompt(prompt)}
+                type="button"
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+
+          <VoiceOrb
+            state={displayOrbState}
+            onPress={handleOrbPress}
+            transcript={transcript}
+          />
+        </section>
+      ) : (
         <>
           <ChatThread messages={messages} isLoading={isLoading} />
 
-          {/* Floating mic button in chat mode */}
-          <div style={{ position: "absolute", bottom: 70, right: 16, zIndex: 20 }}>
+          <div className="chat-fab-wrap">
             <button
-              className={`voice-orb ${orbState}`}
+              className={`voice-orb chat-fab ${displayOrbState}`}
               onClick={handleOrbPress}
               style={{ width: 48, height: 48 }}
               aria-label="Voice input"
             >
               <div className="orb-inner" style={{ transform: "scale(0.6)" }}>
-                {orbState === "listening" ? (
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                {displayOrbState === "listening" ? (
+                  <svg
+                    width="32"
+                    height="32"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                  >
                     <line x1="4" y1="8" x2="4" y2="16" className="wave-bar wave-1" />
                     <line x1="8" y1="5" x2="8" y2="19" className="wave-bar wave-2" />
                     <line x1="12" y1="3" x2="12" y2="21" className="wave-bar wave-3" />
@@ -262,7 +385,16 @@ function JarvisApp() {
                     <line x1="20" y1="8" x2="20" y2="16" className="wave-bar wave-5" />
                   </svg>
                 ) : (
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="32"
+                    height="32"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <rect x="9" y="2" width="6" height="11" rx="3" />
                     <path d="M5 10a7 7 0 0 0 14 0" />
                     <line x1="12" y1="19" x2="12" y2="22" />
@@ -272,14 +404,13 @@ function JarvisApp() {
             </button>
           </div>
 
-          {/* Text input bar */}
           <form className="text-input-bar" onSubmit={handleTextSubmit}>
             <input
               className="text-input"
               type="text"
-              placeholder="Type a message..."
+              placeholder="Ask Jarvis anything about your wallet..."
               value={textInput}
-              onChange={(e) => setTextInput(e.target.value)}
+              onChange={(event) => setTextInput(event.target.value)}
             />
             <button
               className="send-button"

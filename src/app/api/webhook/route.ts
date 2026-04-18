@@ -232,12 +232,12 @@ async function handleManagedBotWebhook(
 
     // Call the AI agent using generateText for server-side non-streaming
     const { generateText, convertToModelMessages, stepCountIs } = await import("ai");
-    const { anthropic } = await import("@ai-sdk/anthropic");
+    const { getAgentModel, agentProviderOptions } = await import("@/lib/agent/model");
     const { buildSystemPrompt } = await import("@/lib/agent/system-prompt");
     const { agentTools } = await import("@/lib/agent/tools");
 
     const result = await generateText({
-      model: anthropic("claude-sonnet-4-5"),
+      model: getAgentModel(),
       system: buildSystemPrompt(walletAddress),
       messages: await convertToModelMessages([
         {
@@ -247,6 +247,7 @@ async function handleManagedBotWebhook(
       ]),
       tools: agentTools,
       stopWhen: stepCountIs(5),
+      providerOptions: agentProviderOptions,
     });
 
     // Extract the text response

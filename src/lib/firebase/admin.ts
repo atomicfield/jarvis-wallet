@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cert, getApp, getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 
 function requireAdminEnv(name: string, value: string | undefined): string {
@@ -11,7 +12,7 @@ function requireAdminEnv(name: string, value: string | undefined): string {
   return value;
 }
 
-function getAdminApp() {
+export function getAdminApp() {
   if (getApps().length > 0) {
     return getApp();
   }
@@ -40,4 +41,8 @@ function getAdminApp() {
 
 export function getAdminDb() {
   return getFirestore(getAdminApp());
+}
+
+export function getAdminAuth() {
+  return getAuth(getAdminApp());
 }

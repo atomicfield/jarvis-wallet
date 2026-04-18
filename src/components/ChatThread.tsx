@@ -75,7 +75,6 @@ function MessageBubble({ message }: { message: UIMessage }) {
             <ToolCard
               key={i}
               toolName={toolName}
-              toolCallId={toolPart.toolCallId}
               state={toolPart.state}
               output={toolPart.output as Record<string, unknown> | undefined}
             />
@@ -89,12 +88,10 @@ function MessageBubble({ message }: { message: UIMessage }) {
 
 function ToolCard({
   toolName,
-  toolCallId,
   state,
   output,
 }: {
   toolName: string;
-  toolCallId: string;
   state: string;
   output?: Record<string, unknown>;
 }) {

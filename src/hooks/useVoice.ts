@@ -24,13 +24,10 @@ export function useVoice(): UseVoiceReturn {
   const [error, setError] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
-  const [isSupported, setIsSupported] = useState(false);
-
-  useEffect(() => {
+  const isSupported =
+    typeof window !== "undefined" &&
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    setIsSupported(!!SpeechRecognition);
-  }, []);
+    Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 
   const startListening = useCallback(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -131,5 +128,4 @@ export function useVoice(): UseVoiceReturn {
     isSupported,
   };
 }
-
 

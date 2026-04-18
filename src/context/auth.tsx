@@ -6,7 +6,7 @@ import {
   signInWithCustomToken,
   User,
 } from "firebase/auth";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { removeToken, setToken } from "./actions";
 
 type AuthContextType = {
@@ -45,30 +45,43 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => unsubscribe();
   }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     await auth.signOut();
-  };
+  }, []);
 
-  const loginWithTelegram = async (initData:string) => {
-  try {
-    const response = await fetch("/api/auth/telegram", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ initData }),
-    });
-    const data = await response.json();
-    if (data.customToken) {
-      await signInWithCustomToken(auth, data.customToken);
-      return { success: true,error: null };
-    } else {
-      console.error("Server can't provide custom token:", data.error);
-      return {success: false, error: data.error || "Bilinmeyen bir hata oluştu."};
-    }
-  } catch (error) {
-    console.error("Error during Telegram login:", error);
-    return {success: false, error: "Giriş yapılırken bir hata oluştu."};
-  }
-};
+  const loginWithTelegram = useCallback(
+    async (initData: string) => {
+      try {
+        const response = await fetch("/api/auth/telegram", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ initData }),
+        });
+        const data = (await response.json()) as {
+          customToken?: string;
+          error?: string;
+        };
+
+        if (data.customToken) {
+          await signInWithCustomToken(auth, data.customToken);
+          return { success: true, error: null };
+        }
+
+        console.error("Server can't provide custom token:", data.error);
+        return {
+          success: false,
+          error: data.error || "An unknown error occurred during Telegram sign-in.",
+        };
+      } catch (error) {
+        console.error("Error during Telegram login:", error);
+        return {
+          success: false,
+          error: "A Telegram sign-in error occurred.",
+        };
+      }
+    },
+    [],
+  );
 
   return (
     <AuthContext.Provider

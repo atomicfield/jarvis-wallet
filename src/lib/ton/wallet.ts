@@ -31,11 +31,6 @@ export function getWalletV4R2Address(publicKey: Buffer): Address {
 
   // WalletV4R2 code (standard)
   // We compute the address using the state init
-  const codeHash = Buffer.from(
-    "febeb337905ae7e72bc8a4e3f17e89b5c0b36e56dd67f91e00e61c4e0958ac42",
-    "hex",
-  );
-
   const stateInit = beginCell()
     .storeBit(false) // split_depth
     .storeBit(false) // special

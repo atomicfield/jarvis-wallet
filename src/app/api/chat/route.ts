@@ -4,8 +4,8 @@ import {
   convertToModelMessages,
   stepCountIs,
 } from "ai";
-import { anthropic } from "@ai-sdk/anthropic";
 
+import { getAgentModel, agentProviderOptions } from "@/lib/agent/model";
 import { buildSystemPrompt } from "@/lib/agent/system-prompt";
 import { agentTools } from "@/lib/agent/tools";
 
@@ -28,11 +28,12 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     const result = streamText({
-      model: anthropic("claude-sonnet-4-5"),
+      model: getAgentModel(),
       system: buildSystemPrompt(walletAddress ?? undefined),
       messages: await convertToModelMessages(messages),
       tools: agentTools,
       stopWhen: stepCountIs(5),
+      providerOptions: agentProviderOptions,
       onStepFinish: ({ toolResults }) => {
         if (toolResults && toolResults.length > 0) {
           console.log(

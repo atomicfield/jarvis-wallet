@@ -10,7 +10,6 @@ import {
   buildStakeTransaction,
   buildUnstakeTransaction,
 } from "@/lib/defi/stake";
-import { formatTokenAmount } from "@/lib/defi/tokens";
 
 /**
  * All DeFi tools available to the Jarvis AI agent.

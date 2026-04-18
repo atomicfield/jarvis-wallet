@@ -6,6 +6,7 @@ Voice-first TON DeFi wallet for Telegram managed bots, built with Next.js and de
 
 - Next.js 16 (App Router, TypeScript, Tailwind CSS)
 - Firebase Firestore (`firebase`, `firebase-admin`) for app data
+- Google Gemini via Vercel AI SDK for Jarvis agent responses
 - Planned integrations: Telegram managed bots, STON.fi, Tonstakers, AI agent APIs
 
 ## Firebase setup
@@ -44,6 +45,8 @@ Voice-first TON DeFi wallet for Telegram managed bots, built with Next.js and de
 ### Secrets
 
 - `MANAGED_BOT_TOKEN_ENCRYPTION_KEY_BASE64` (must decode to 32 bytes for AES-256-GCM)
+- `GOOGLE_GENERATIVE_AI_API_KEY` or `GEMINI_API_KEY`
+- `JARVIS_AGENT_MODEL` (optional, defaults to `gemini-flash-latest`)
 
 ## Local development
 

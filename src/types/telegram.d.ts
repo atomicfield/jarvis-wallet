@@ -6,8 +6,6 @@
  * without explicit imports.
  */
 
-/* eslint-disable no-var */
-
 declare global {
   interface TelegramWebAppUser {
     id: number;

@@ -1,22 +1,20 @@
-// src/app/api/auth/telegram/route.ts
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 
-// Firebase Admin SDK'nın yalnızca bir kez başlatıldığından emin olun (Next.js HMR sorunlarını önlemek için)
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-    }),
-  });
+import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
+import { requireEnv } from "@/lib/server/env";
+
+function getTelegramBotToken() {
+  return (
+    process.env.TELEGRAM_MANAGER_BOT_TOKEN ??
+    process.env.TELEGRAM_BOT_TOKEN ??
+    requireEnv("TELEGRAM_MANAGER_BOT_TOKEN")
+  );
 }
 
 function verifyTelegramWebAppData(initData: string) {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  if (!botToken) throw new Error("Bot token ayarlanmamış.");
+  const botToken = getTelegramBotToken();
 
   const urlParams = new URLSearchParams(initData);
   const hash = urlParams.get("hash");
@@ -31,63 +29,82 @@ function verifyTelegramWebAppData(initData: string) {
 
   // HMAC-SHA256 ile doğrula
   const secretKey = crypto.createHmac("sha256", "WebAppData").update(botToken).digest();
-  const calculatedHash = crypto.createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
+  const calculatedHash = crypto
+    .createHmac("sha256", secretKey)
+    .update(dataCheckString)
+    .digest("hex");
 
-  if (calculatedHash !== hash) {
-    throw new Error("Geçersiz Telegram verisi. Doğrulama başarısız.");
+  if (!hash) {
+    throw new Error("Missing Telegram hash.");
   }
 
-  // Veriyi JSON objesine çevir (Örn: user={id:123, first_name:"John"})
+  const hashBuffer = Buffer.from(hash, "hex");
+  const calculatedBuffer = Buffer.from(calculatedHash, "hex");
+
+  if (
+    hashBuffer.length !== calculatedBuffer.length ||
+    !crypto.timingSafeEqual(hashBuffer, calculatedBuffer)
+  ) {
+    throw new Error("Invalid Telegram init data.");
+  }
+
   const userDataString = urlParams.get("user");
-  if (!userDataString) throw new Error("Kullanıcı verisi bulunamadı.");
-  
-  return JSON.parse(userDataString);
+  if (!userDataString) {
+    throw new Error("Telegram user payload is missing.");
+  }
+
+  return JSON.parse(userDataString) as TelegramWebAppUser;
 }
 
-export async function POST(request: Request) {
+export async function POST(request: Request): Promise<Response> {
   try {
-    const body = await request.json();
+    const body = (await request.json()) as { initData?: string };
     const { initData } = body;
 
     if (!initData) {
       return NextResponse.json({ error: "initData not found." }, { status: 400 });
     }
 
-    // 1. Telegram verisini doğrula
     const telegramUser = verifyTelegramWebAppData(initData);
     const telegramId = telegramUser.id.toString();
 
-    const db = admin.firestore();
+    const db = getAdminDb();
     const userRef = db.collection("users").doc(telegramId);
     const userDoc = await userRef.get();
+    const userPayload = {
+      telegramId,
+      firstName: telegramUser.first_name,
+      lastName: telegramUser.last_name ?? null,
+      username: telegramUser.username ?? null,
+      languageCode: telegramUser.language_code ?? "en",
+      photoUrl: telegramUser.photo_url ?? null,
+      isPremium: telegramUser.is_premium ?? false,
+    };
 
     if (!userDoc.exists) {
       await userRef.set({
-        telegramId: telegramId,
-        firstName: telegramUser.first_name,
-        lastName: telegramUser.last_name || null,
-        username: telegramUser.username || null,
-        languageCode: telegramUser.language_code || "tr",
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        lastLogin: admin.firestore.FieldValue.serverTimestamp(),
+        ...userPayload,
+        createdAt: FieldValue.serverTimestamp(),
+        lastLogin: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       });
     } else {
       await userRef.update({
-        lastLogin: admin.firestore.FieldValue.serverTimestamp(),
-        ısername: telegramUser.username || null,
-        firstName: telegramUser.first_name, 
-        username: telegramUser.username || null,
+        ...userPayload,
+        lastLogin: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       });
     }
-    const customToken = await admin.auth().createCustomToken(telegramId, {
+
+    const customToken = await getAdminAuth().createCustomToken(telegramId, {
       provider: "telegram",
     });
 
     return NextResponse.json({ customToken, user: telegramUser });
-
   } catch (error) {
-    console.error("Auth Hatası:", error);
-    const errorMessage = error instanceof Error ? error.message : "Bilinmeyen bir hata oluştu.";
+    console.error("[TelegramAuth] Failed to authenticate Telegram user", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Failed to authenticate Telegram user.";
     return NextResponse.json({ error: errorMessage }, { status: 401 });
   }
 }
