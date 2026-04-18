@@ -2,22 +2,27 @@ import type { Metadata, Viewport } from "next";
 import {
   Cormorant_Garamond,
   IBM_Plex_Mono,
-  Onest, Geist } from "next/font/google";
+  Onest,
+  Geist,
+} from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { AuthProvider } from "@/context/auth";
 import { cn } from "@/lib/utils";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+const geist = Geist({
+  subsets: ["latin"],
+  variable: "--font-sans",
+});
 
 const onest = Onest({
-  variable: "--font-geist-sans",
+  variable: "--font-heading",
   subsets: ["latin"],
   weight: "variable",
 });
 
 const plexMono = IBM_Plex_Mono({
-  variable: "--font-geist-mono",
+  variable: "--font-mono",
   subsets: ["latin"],
   weight: ["400", "500"],
 });
@@ -50,7 +55,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={cn(onest.variable, plexMono.variable, cormorant.variable, "font-sans", geist.variable)}
+      className={cn(
+        geist.variable,
+        onest.variable,
+        plexMono.variable,
+        cormorant.variable,
+        "font-sans",
+      )}
       suppressHydrationWarning
     >
       <head>

@@ -252,7 +252,7 @@ export function TelegramInit({ children }: { children: ReactNode }) {
       setAuthState("authenticating");
       setAuthError(null);
 
-      const result = await loginWithTelegram(initData);
+      const result = await loginWithTelegram({ initData });
       if (!active) {
         return;
       }

@@ -108,6 +108,18 @@ function JarvisApp() {
 
     let active = true;
 
+    async function syncWalletToFirestore(address: string) {
+      try {
+        await fetch("/api/wallet/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ walletAddress: address }),
+        });
+      } catch (err) {
+        console.warn("[Wallet] Failed to sync address to Firestore:", err);
+      }
+    }
+
     async function initWallet() {
       try {
         const storedWallet = await loadWalletFromSecureStorage();
@@ -117,6 +129,7 @@ function JarvisApp() {
 
         if (storedWallet) {
           setWalletAddress(storedWallet.address);
+          void syncWalletToFirestore(storedWallet.address);
           return;
         }
 
@@ -139,6 +152,7 @@ function JarvisApp() {
         }
 
         setWalletAddress(wallet.address);
+        void syncWalletToFirestore(wallet.address);
       } catch (error) {
         console.error("[Wallet] Init error:", error);
       } finally {

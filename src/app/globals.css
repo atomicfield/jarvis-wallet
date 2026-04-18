@@ -25,8 +25,9 @@
   --error-red: #ff7f90;
   --success-green: #76e5b2;
 
-  --font-sans: var(--font-geist-sans, sans-serif);
-  --font-mono: var(--font-geist-mono, monospace);
+  --font-sans: var(--font-sans, sans-serif);
+  --font-mono: var(--font-mono, monospace);
+  --font-heading-family: var(--font-heading, var(--font-sans, sans-serif));
   --font-display-family: var(--font-display, serif);
 
   --safe-top: var(--tg-safe-area-inset-top, 0px);
@@ -75,7 +76,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-heading-family);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -208,7 +209,7 @@ input {
 
 .app-loading-title {
   margin: 18px 0 10px;
-  font-family: var(--font-display-family);
+  font-family: var(--font-heading-family);
   font-size: clamp(2.8rem, 8vw, 4.2rem);
   font-weight: 600;
   line-height: 0.95;
@@ -397,7 +398,7 @@ input {
 
 .jarvis-welcome-title {
   margin: 0;
-  font-family: var(--font-display-family);
+  font-family: var(--font-heading-family);
   font-size: clamp(2.8rem, 11vw, 4.8rem);
   font-weight: 600;
   line-height: 0.92;
