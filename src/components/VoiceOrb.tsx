@@ -30,38 +30,52 @@ export function VoiceOrb({ state, onPress, transcript }: VoiceOrbProps) {
 
 
   function startVolumeTracking() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      return;
+    }
+
     (async () => {
       try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      streamRef.current = stream;
-      const audioCtx = new (window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      audioContextRef.current = audioCtx;
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-      analyserRef.current = analyser;
-      
-      const source = audioCtx.createMediaStreamSource(stream);
-      source.connect(analyser);
-      
-      const bufferLength = analyser.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
-      
-      const draw = () => {
-        if (!analyserRef.current) return;
-        analyserRef.current.getByteFrequencyData(dataArray);
-        let sum = 0;
-        for (let i = 0; i < bufferLength; i++) {
-          sum += dataArray[i];
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        streamRef.current = stream;
+        const audioCtx = new (
+          window.AudioContext
+          || (window as Window & typeof globalThis & { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+        )();
+        audioContextRef.current = audioCtx;
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        analyserRef.current = analyser;
+
+        const source = audioCtx.createMediaStreamSource(stream);
+        source.connect(analyser);
+
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        const draw = () => {
+          if (!analyserRef.current) {
+            return;
+          }
+
+          analyserRef.current.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < bufferLength; i++) {
+            sum += dataArray[i];
+          }
+          const avg = sum / bufferLength;
+          const v = (avg / 128.0) * 2;
+          setVolume(Math.max(0.2, Math.min(v, 2.5)));
+          rafRef.current = requestAnimationFrame(draw);
+        };
+        draw();
+      } catch (error) {
+        const maybeDomError = error as DOMException | undefined;
+        if (maybeDomError?.name !== "NotAllowedError") {
+          console.error("Mic volume tracking failed:", error);
         }
-        const avg = sum / bufferLength;
-        const v = (avg / 128.0) * 2; // Arbitrary scaling
-        setVolume(Math.max(0.2, Math.min(v, 2.5)));
-        rafRef.current = requestAnimationFrame(draw);
-      };
-      draw();
-    } catch (e) {
-      console.error("Mic error:", e);
-    }
+        setVolume(0.1);
+      }
     })();
   }
 
@@ -88,74 +102,76 @@ export function VoiceOrb({ state, onPress, transcript }: VoiceOrbProps) {
   }, [state]);
 
   return (
-    <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-3 py-[calc(8px+var(--tg-content-safe-area-inset-bottom))]">
-      <div
-        className={cn(
-          "pointer-events-none absolute rounded-full border border-white/15",
-          state === "listening"
-            ? "size-[188px] animate-ping opacity-100 motion-reduce:animate-none"
-            : "size-[188px] opacity-0",
-        )}
-      />
-      <div
-        className={cn(
-          "pointer-events-none absolute rounded-full border border-white/10 [animation-delay:200ms]",
-          state === "listening"
-            ? "size-[236px] animate-ping opacity-100 motion-reduce:animate-none"
-            : "size-[236px] opacity-0",
-        )}
-      />
-      <div
-        className={cn(
-          "pointer-events-none absolute rounded-full border border-white/10 [animation-delay:400ms]",
-          state === "listening"
-            ? "size-[282px] animate-ping opacity-100 motion-reduce:animate-none"
-            : "size-[282px] opacity-0",
-        )}
-      />
-
-      <button
-        id="voice-orb-button"
-        className={cn(
-          "relative grid size-[154px] place-items-center rounded-full border-0 text-foreground shadow-[0_32px_80px_rgba(2,6,16,0.48),0_0_0_1px_rgba(255,255,255,0.08),inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform duration-200 ease-out active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300/60",
-          state === "idle" &&
-            "bg-zinc-800 motion-safe:animate-pulse motion-reduce:animate-none",
-          state === "listening" &&
-            "bg-zinc-700 shadow-[0_0_0_1px_rgba(255,255,255,0.12),0_24px_80px_rgba(40,40,40,0.56),0_0_48px_rgba(255,255,255,0.12)] motion-safe:animate-pulse motion-reduce:animate-none",
-          state === "processing" &&
-            "bg-zinc-700 shadow-[0_0_0_1px_rgba(255,255,255,0.14),0_24px_80px_rgba(32,32,32,0.6),0_0_42px_rgba(255,255,255,0.12)]",
-          state === "speaking" &&
-            "bg-zinc-600 shadow-[0_0_0_1px_rgba(255,255,255,0.14),0_24px_80px_rgba(32,32,32,0.58),0_0_44px_rgba(255,255,255,0.12)] motion-safe:animate-pulse motion-reduce:animate-none",
-          state === "error" &&
-            "bg-zinc-700 shadow-[0_0_0_1px_rgba(255,255,255,0.16),0_24px_80px_rgba(23,23,23,0.6),0_0_42px_rgba(255,255,255,0.1)]",
-        )}
-        onClick={handleClick}
-        aria-label={
-          state === "listening" ? "Stop listening" : "Start listening"
-        }
-      >
+    <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-1.5 py-[calc(2px+var(--tg-content-safe-area-inset-bottom))]">
+      <div className="relative grid size-[132px] place-items-center md:size-[112px]">
         <div
           className={cn(
-            "text-zinc-200 transition-colors duration-200",
-            (state === "listening" || state === "speaking") && "text-zinc-50",
-            state === "error" && "text-zinc-200",
+            "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/15",
+            state === "listening"
+              ? "size-[88px] animate-ping opacity-100 motion-reduce:animate-none md:size-[76px]"
+              : "size-[88px] opacity-0 md:size-[76px]",
           )}
-          style={{ transform: state === "listening" ? `scale(${1 + (volume * 0.15)})` : "scale(1)" }}
+        />
+        <div
+          className={cn(
+            "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/10 [animation-delay:200ms]",
+            state === "listening"
+              ? "size-[112px] animate-ping opacity-100 motion-reduce:animate-none md:size-[96px]"
+              : "size-[112px] opacity-0 md:size-[96px]",
+          )}
+        />
+        <div
+          className={cn(
+            "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/10 [animation-delay:400ms]",
+            state === "listening"
+              ? "size-[132px] animate-ping opacity-100 motion-reduce:animate-none md:size-[112px]"
+              : "size-[132px] opacity-0 md:size-[112px]",
+          )}
+        />
+
+        <button
+          id="voice-orb-button"
+          className={cn(
+            "relative z-10 grid size-[74px] place-items-center rounded-full border-0 text-foreground shadow-[0_22px_48px_rgba(2,6,16,0.45),0_0_0_1px_rgba(255,255,255,0.08),inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform duration-200 ease-out active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300/60 md:size-[64px]",
+            state === "idle" &&
+              "bg-zinc-900 motion-safe:animate-pulse motion-reduce:animate-none",
+            state === "listening" &&
+              "bg-zinc-800 shadow-[0_0_0_1px_rgba(255,255,255,0.12),0_24px_80px_rgba(40,40,40,0.56),0_0_48px_rgba(255,255,255,0.12)] motion-safe:animate-pulse motion-reduce:animate-none",
+            state === "processing" &&
+              "bg-zinc-800 shadow-[0_0_0_1px_rgba(255,255,255,0.14),0_24px_80px_rgba(32,32,32,0.6),0_0_42px_rgba(255,255,255,0.12)]",
+            state === "speaking" &&
+              "bg-zinc-700 shadow-[0_0_0_1px_rgba(255,255,255,0.14),0_24px_80px_rgba(32,32,32,0.58),0_0_44px_rgba(255,255,255,0.12)] motion-safe:animate-pulse motion-reduce:animate-none",
+            state === "error" &&
+              "bg-zinc-800 shadow-[0_0_0_1px_rgba(255,255,255,0.16),0_24px_80px_rgba(23,23,23,0.6),0_0_42px_rgba(255,255,255,0.1)]",
+          )}
+          onClick={handleClick}
+          aria-label={
+            state === "listening" ? "Stop listening" : "Start listening"
+          }
         >
-          {state === "idle" && <MicIcon />}
-          {state === "listening" && <WaveformIcon volume={volume} />}
-          {state === "processing" && <SpinnerIcon />}
-          {state === "speaking" && <SpeakerIcon />}
-          {state === "error" && <ErrorIcon />}
-        </div>
-      </button>
+          <div
+            className={cn(
+              "text-zinc-200 transition-colors duration-200",
+              (state === "listening" || state === "speaking") && "text-zinc-50",
+              state === "error" && "text-zinc-200",
+            )}
+            style={{ transform: state === "listening" ? `scale(${1 + (volume * 0.15)})` : "scale(1)" }}
+          >
+            {state === "idle" && <MicIcon />}
+            {state === "listening" && <WaveformIcon volume={volume} />}
+            {state === "processing" && <SpinnerIcon />}
+            {state === "speaking" && <SpeakerIcon />}
+            {state === "error" && <ErrorIcon />}
+          </div>
+        </button>
+      </div>
 
       <div
         className={cn(
-          "text-sm font-medium tracking-[0.08em]",
+          "text-[0.82rem] font-medium tracking-[0.08em]",
           state === "idle" && "text-zinc-500",
-          (state === "listening" || state === "processing" || state === "speaking" || state === "error") &&
-            "text-zinc-300",
+          (state === "listening" || state === "processing" || state === "speaking" || state === "error")
+            && "text-zinc-300",
         )}
       >
         {state === "idle" && "Tap to speak"}
@@ -166,7 +182,7 @@ export function VoiceOrb({ state, onPress, transcript }: VoiceOrbProps) {
       </div>
 
       {transcript && (state === "listening" || state === "processing") && (
-        <div className="max-w-[min(320px,88vw)] rounded-[18px] border border-white/10 bg-zinc-900/70 px-4 py-3 text-center leading-6 text-foreground backdrop-blur-xl">
+        <div className="max-w-[min(320px,88vw)] rounded-[18px] border border-white/10 bg-zinc-950/82 px-4 py-3 text-center leading-6 text-foreground backdrop-blur-xl">
           {transcript}
         </div>
       )}
@@ -177,8 +193,8 @@ export function VoiceOrb({ state, onPress, transcript }: VoiceOrbProps) {
 function MicIcon() {
   return (
     <svg
-      width="32"
-      height="32"
+      width="20"
+      height="20"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -196,8 +212,8 @@ function MicIcon() {
 function WaveformIcon({ volume = 1 }: { volume?: number }) {
   return (
     <svg
-      width="32"
-      height="32"
+      width="20"
+      height="20"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -217,8 +233,8 @@ function WaveformIcon({ volume = 1 }: { volume?: number }) {
 function SpinnerIcon() {
   return (
     <svg
-      width="32"
-      height="32"
+      width="20"
+      height="20"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -234,8 +250,8 @@ function SpinnerIcon() {
 function SpeakerIcon() {
   return (
     <svg
-      width="32"
-      height="32"
+      width="20"
+      height="20"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -256,8 +272,8 @@ function SpeakerIcon() {
 function ErrorIcon() {
   return (
     <svg
-      width="32"
-      height="32"
+      width="20"
+      height="20"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"

@@ -4,8 +4,6 @@ import { decodeJwt } from "jose";
 
 export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  
-  console.log("PROXY:", pathname);
 
   if (request.method === "POST") {
     return NextResponse.next();
@@ -13,14 +11,14 @@ export default async function proxy(request: NextRequest) {
   const cookieStore = await cookies();
   const token = cookieStore.get("firebaseAuthToken")?.value;
 
-  const isAuthPage = pathname === "/"; 
-
-  if (!token && !isAuthPage) {
+  if (pathname === "/home") {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  if (token && isAuthPage) {
-    return NextResponse.redirect(new URL("/home", request.url));
+  const isAuthPage = pathname === "/";
+
+  if (!token && !isAuthPage) {
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   if (token) {
@@ -45,7 +43,7 @@ export default async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     "/",
-    "/home", 
+    "/home",
     "/account/:path*",
     "/property-search",
   ],

@@ -29,6 +29,19 @@ export function useVoice(): UseVoiceReturn {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 
+  const mapVoiceError = useCallback((errorCode: string) => {
+    if (errorCode === "not-allowed" || errorCode === "service-not-allowed") {
+      return "Microphone access is blocked. Enable microphone permission in Telegram/browser settings.";
+    }
+    if (errorCode === "audio-capture") {
+      return "No microphone was detected on this device.";
+    }
+    if (errorCode === "network") {
+      return "Network error while starting voice recognition.";
+    }
+    return `Speech recognition error: ${errorCode}`;
+  }, []);
+
   const startListening = useCallback(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -77,9 +90,17 @@ export function useVoice(): UseVoiceReturn {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onerror = (event: any) => {
-      if (event.error !== "aborted") {
-        setError(`Speech recognition error: ${event.error}`);
-        console.error("[useVoice] Error:", event.error);
+      if (event.error === "aborted") {
+        setIsListening(false);
+        return;
+      }
+
+      const message = mapVoiceError(event.error);
+      setError(message);
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        console.warn("[useVoice]", message);
+      } else {
+        console.error("[useVoice]", message);
       }
       setIsListening(false);
     };
@@ -89,8 +110,15 @@ export function useVoice(): UseVoiceReturn {
     };
 
     recognitionRef.current = recognition;
-    recognition.start();
-  }, []);
+    try {
+      recognition.start();
+    } catch (error) {
+      const message = mapVoiceError("not-allowed");
+      setError(message);
+      setIsListening(false);
+      console.warn("[useVoice]", message, error);
+    }
+  }, [mapVoiceError]);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
@@ -128,4 +156,3 @@ export function useVoice(): UseVoiceReturn {
     isSupported,
   };
 }
-

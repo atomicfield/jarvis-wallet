@@ -51,7 +51,7 @@ export function ChatThread({ messages, isLoading }: ChatThreadProps) {
         <MessageBubble key={msg.id} message={msg} />
       ))}
       {isLoading && (
-        <div className="inline-flex w-fit items-center gap-1.5 self-start rounded-[18px] border border-white/10 bg-zinc-900/80 px-4 py-3 backdrop-blur-xl">
+        <div className="inline-flex w-fit items-center gap-1.5 self-start rounded-[18px] border border-white/10 bg-zinc-950/86 px-4 py-3 backdrop-blur-xl">
           <div className="size-1.5 animate-bounce rounded-full bg-zinc-300 [animation-delay:0ms]" />
           <div className="size-1.5 animate-bounce rounded-full bg-zinc-300 [animation-delay:120ms]" />
           <div className="size-1.5 animate-bounce rounded-full bg-zinc-300 [animation-delay:240ms]" />
@@ -69,8 +69,8 @@ function MessageBubble({ message }: { message: UIMessage }) {
       className={cn(
         "w-fit max-w-[min(88%,520px)] animate-in fade-in slide-in-from-bottom-2 duration-200 max-sm:max-w-[92%]",
         isUser
-          ? "self-end rounded-[18px_18px_8px_18px] border border-white/15 bg-zinc-800/90 px-3.5 py-3"
-          : "self-start rounded-[18px_18px_18px_8px] border border-white/10 bg-zinc-900/80 px-3.5 py-3 backdrop-blur-xl",
+          ? "self-end rounded-[18px_18px_8px_18px] border border-white/15 bg-zinc-900/90 px-3.5 py-3"
+          : "self-start rounded-[18px_18px_18px_8px] border border-white/10 bg-zinc-950/86 px-3.5 py-3 backdrop-blur-xl",
       )}
     >
       {message.parts.map((part, i) => {
@@ -127,11 +127,11 @@ function ToolCard({
   return (
     <div
       className={cn(
-        "mt-2.5 overflow-hidden rounded-2xl border bg-zinc-900/75",
+        "mt-2.5 overflow-hidden rounded-2xl border bg-zinc-950/84",
         isComplete ? "border-white/20" : "border-white/10",
       )}
     >
-      <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2.5 text-[0.74rem] tracking-[0.12em] uppercase text-zinc-300">
+      <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2.5 text-[0.74rem] tracking-[0.12em] text-zinc-300">
         <span className="inline-flex items-center justify-center text-zinc-200">
           {getToolIcon(toolName)}
         </span>

@@ -31,10 +31,10 @@ export function JarvisWelcome({
   return (
     <section
       aria-live="polite"
-      className="relative overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/85 p-4 shadow-[0_18px_48px_rgba(0,0,0,0.28)] backdrop-blur-xl"
+      className="relative overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/88 p-4 shadow-[0_18px_48px_rgba(0,0,0,0.34)] backdrop-blur-xl"
     >
       <div className="relative z-10">
-        <span className="mb-2 inline-flex text-[0.64rem] font-medium tracking-[0.22em] uppercase text-zinc-400">
+        <span className="mb-2 inline-flex text-[0.64rem] font-medium tracking-[0.22em] text-zinc-400">
           Jarvis Voice Wallet
         </span>
         <h1 className="m-0 text-[clamp(1.7rem,8.2vw,2.6rem)] leading-[1.04] font-semibold tracking-[-0.03em]">
