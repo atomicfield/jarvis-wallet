@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { AnimatePresence, motion } from "framer-motion";
@@ -1600,6 +1601,16 @@ function JarvisApp() {
             </h2>
             <p className="mt-2 text-sm leading-[1.55] text-zinc-300">
               Start staking TON with Tonstakers and receive tsTON while your position accrues rewards.
+            </p>
+            <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-zinc-400">
+              <span>Powered by</span>
+              <Image
+                src="/tonstakers.svg"
+                alt="Tonstakers"
+                width={78}
+                height={14}
+                className="h-[14px] w-auto"
+              />
             </p>
           </div>
 

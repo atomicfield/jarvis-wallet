@@ -22,6 +22,8 @@ export const runtime = "nodejs";
 
 const QUOTE_TIMEOUT_MS = 9000;
 const BEST_QUOTE_WINDOW_MS = 1200;
+const QUOTE_RETRY_ATTEMPTS = 3;
+const QUOTE_RETRY_DELAY_MS = 350;
 const DEFAULT_OMNISTON_API_URL = "wss://omni-ws.ston.fi";
 
 interface SwapQuoteRequestBody {
@@ -200,6 +202,48 @@ async function requestBestQuote(params: {
   });
 }
 
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function isNoQuoteError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return message.includes("no swap quote available");
+}
+
+async function requestBestQuoteWithRetry(params: {
+  apiUrl: string;
+  bidAddress: string;
+  askAddress: string;
+  bidUnits: string;
+}): Promise<QuoteResponseEvent_QuoteUpdated> {
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= QUOTE_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      return await requestBestQuote(params);
+    } catch (error) {
+      lastError = error;
+      const isLastAttempt = attempt === QUOTE_RETRY_ATTEMPTS;
+      if (isLastAttempt || isNoQuoteError(error)) {
+        break;
+      }
+
+      await wait(QUOTE_RETRY_DELAY_MS * attempt);
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Swap quote request failed.");
+}
+
 function buildRoutePreview(
   quote: Quote,
   tokenByAddress: Map<string, SwapTokenCatalogItem>,
@@ -274,7 +318,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     }
 
     const apiUrl = process.env.OMNISTON_API_URL?.trim() || DEFAULT_OMNISTON_API_URL;
-    const quoteEvent = await requestBestQuote({
+    const quoteEvent = await requestBestQuoteWithRetry({
       apiUrl,
       bidAddress: offerToken.address,
       askAddress: askToken.address,
@@ -314,6 +358,13 @@ export async function POST(request: NextRequest): Promise<Response> {
       routes: buildRoutePreview(quote, tokenCatalog.byAddress),
     });
   } catch (error) {
+    if (isNoQuoteError(error)) {
+      return NextResponse.json(
+        { error: "No swap quote available for this pair right now." },
+        { status: 422 },
+      );
+    }
+
     console.error("[SwapQuote] Failed to fetch Omniston quote:", error);
     return NextResponse.json(
       { error: "Could not fetch swap quote right now." },

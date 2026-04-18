@@ -7,7 +7,7 @@ import {
 
 import { getAgentModel, agentProviderOptions } from "@/lib/agent/model";
 import { buildSystemPrompt } from "@/lib/agent/system-prompt";
-import { agentTools } from "@/lib/agent/tools";
+import { createAgentTools } from "@/lib/agent/tools";
 
 export const runtime = "nodejs";
 
@@ -39,7 +39,7 @@ export async function POST(req: Request): Promise<Response> {
       model: getAgentModel(),
       system: systemPrompt,
       messages: await convertToModelMessages(messages),
-      tools: agentTools,
+      tools: createAgentTools(walletAddress),
       stopWhen: stepCountIs(5),
       providerOptions: agentProviderOptions,
       onStepFinish: ({ toolResults }) => {

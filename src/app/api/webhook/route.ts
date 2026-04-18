@@ -102,7 +102,7 @@ async function handleTextMessage(botToken: string, message: TelegramMessage): Pr
     const { generateText, convertToModelMessages, stepCountIs } = await import("ai");
     const { getAgentModel, agentProviderOptions } = await import("@/lib/agent/model");
     const { buildSystemPrompt } = await import("@/lib/agent/system-prompt");
-    const { agentTools } = await import("@/lib/agent/tools");
+    const { createAgentTools } = await import("@/lib/agent/tools");
 
     const result = await generateText({
       model: getAgentModel(),
@@ -113,7 +113,7 @@ async function handleTextMessage(botToken: string, message: TelegramMessage): Pr
           parts: [{ type: "text" as const, text }],
         },
       ]),
-      tools: agentTools,
+      tools: createAgentTools(walletAddress),
       stopWhen: stepCountIs(5),
       providerOptions: agentProviderOptions,
     });

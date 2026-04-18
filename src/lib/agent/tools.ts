@@ -15,44 +15,60 @@ import {
  * All DeFi tools available to the Jarvis AI agent.
  * Each tool is a function the LLM can invoke via structured tool calling.
  */
-export const agentTools = {
-  check_balance: tool({
-    description:
-      "Check the TON balance and all jetton (token) balances for the user's wallet address.",
-    inputSchema: z.object({
-      walletAddress: z
-        .string()
-        .describe("The TON wallet address to check balances for"),
+export function createAgentTools(defaultWalletAddress?: string) {
+  const resolvedDefaultWalletAddress = defaultWalletAddress?.trim() || undefined;
+
+  return {
+    check_balance: tool({
+      description:
+        "Check the TON balance and all jetton (token) balances for the user's wallet address.",
+      inputSchema: z.object({
+        walletAddress: z
+          .string()
+          .optional()
+          .describe(
+            "Optional TON wallet address override. If omitted, use the current user's connected wallet address.",
+          ),
+      }),
+      execute: async ({ walletAddress }) => {
+        try {
+          const targetWalletAddress = walletAddress?.trim() || resolvedDefaultWalletAddress;
+          if (!targetWalletAddress) {
+            return {
+              success: false,
+              error:
+                "No wallet address is available. Ask the user to connect their wallet first.",
+            };
+          }
+
+          const [tonBalance, jettons] = await Promise.all([
+            getBalanceFormatted(targetWalletAddress),
+            getJettonBalances(targetWalletAddress),
+          ]);
+
+          const jettonBalances = jettons.map((j) => ({
+            symbol: j.symbol,
+            name: j.name,
+            balance: j.balance,
+          }));
+
+          return {
+            success: true,
+            walletAddress: targetWalletAddress,
+            tonBalance: tonBalance + " TON",
+            jettonBalances,
+            totalTokens: jettonBalances.length + 1,
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: `Failed to fetch balance: ${error instanceof Error ? error.message : "Unknown error"}`,
+          };
+        }
+      },
     }),
-    execute: async ({ walletAddress }) => {
-      try {
-        const [tonBalance, jettons] = await Promise.all([
-          getBalanceFormatted(walletAddress),
-          getJettonBalances(walletAddress),
-        ]);
 
-        const jettonBalances = jettons.map((j) => ({
-          symbol: j.symbol,
-          name: j.name,
-          balance: j.balance,
-        }));
-
-        return {
-          success: true,
-          tonBalance: tonBalance + " TON",
-          jettonBalances,
-          totalTokens: jettonBalances.length + 1,
-        };
-      } catch (error) {
-        return {
-          success: false,
-          error: `Failed to fetch balance: ${error instanceof Error ? error.message : "Unknown error"}`,
-        };
-      }
-    },
-  }),
-
-  swap_tokens: tool({
+    swap_tokens: tool({
     description:
       "Simulate a token swap on STON.fi DEX. Returns estimated output, price impact, and swap rate for user confirmation. Does NOT execute the swap.",
     inputSchema: z.object({
@@ -98,7 +114,7 @@ export const agentTools = {
     },
   }),
 
-  stake_ton: tool({
+    stake_ton: tool({
     description:
       "Prepare a TON staking transaction via Tonstakers. The user will receive tsTON (liquid staking token) that earns staking rewards automatically.",
     inputSchema: z.object({
@@ -135,7 +151,7 @@ export const agentTools = {
     },
   }),
 
-  unstake_ton: tool({
+    unstake_ton: tool({
     description:
       "Prepare an unstaking transaction to convert tsTON back to TON via Tonstakers. Standard unstaking takes ~18 hours.",
     inputSchema: z.object({
@@ -169,7 +185,7 @@ export const agentTools = {
     },
   }),
 
-  get_staking_info: tool({
+    get_staking_info: tool({
     description:
       "Get current Tonstakers liquid staking information including APY, TVL, tsTON rate, and minimum stake amount.",
     inputSchema: z.object({}),
@@ -195,7 +211,7 @@ export const agentTools = {
     },
   }),
 
-  get_token_price: tool({
+    get_token_price: tool({
     description:
       "Get the current USD price of a token on the TON blockchain via STON.fi.",
     inputSchema: z.object({
@@ -227,4 +243,7 @@ export const agentTools = {
       }
     },
   }),
-};
+  };
+}
+
+export const agentTools = createAgentTools();
