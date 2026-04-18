@@ -1,10 +1,18 @@
 "use client";
 
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeftRight, House, MessageCircle, Mic, TrendingUp } from "lucide-react";
+import {
+  ArrowLeftRight,
+  ArrowRight,
+  ChevronDown,
+  House,
+  MessageCircle,
+  Mic,
+  TrendingUp,
+} from "lucide-react";
 
 import { AssetOverview } from "@/components/AssetOverview";
 import { ChatThread } from "@/components/ChatThread";
@@ -12,6 +20,15 @@ import { TelegramInit, useTelegram } from "@/components/TelegramInit";
 import { VoiceOrb, type OrbState } from "@/components/VoiceOrb";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -118,6 +135,14 @@ interface SwapQuoteResponse {
   routes: SwapRoutePreview[];
 }
 
+interface StakeOverviewResponse {
+  apy: string;
+  tvlTon: string;
+  tstonRate: string;
+  minStake: string;
+  stakersCount: string;
+}
+
 const FALLBACK_SWAP_TOKENS: SwapTokenOption[] = KNOWN_TOKENS.map((token) => ({
   symbol: token.symbol.toUpperCase(),
   name: token.name,
@@ -125,6 +150,108 @@ const FALLBACK_SWAP_TOKENS: SwapTokenOption[] = KNOWN_TOKENS.map((token) => ({
   decimals: token.decimals,
   imageUrl: null,
 }));
+
+function SwapTokenIcon({
+  symbol,
+  imageUrl,
+  className,
+}: {
+  symbol: string;
+  imageUrl: string | null;
+  className?: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  const shortLabel = symbol.trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 2) || "?";
+
+  if (imageUrl && !failed) {
+    return (
+      <span className={cn("inline-flex items-center justify-center overflow-hidden rounded-full border border-white/15", className)}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={imageUrl}
+          alt={`${symbol} icon`}
+          className="size-full object-cover"
+          loading="lazy"
+          onError={() => setFailed(true)}
+        />
+      </span>
+    );
+  }
+
+  return (
+    <span className={cn("inline-flex items-center justify-center rounded-full border border-white/20 bg-zinc-800 text-[0.62rem] font-semibold text-zinc-200", className)}>
+      {shortLabel}
+    </span>
+  );
+}
+
+function SwapTokenDropdown({
+  label,
+  value,
+  tokens,
+  onValueChange,
+}: {
+  label: string;
+  value: string;
+  tokens: SwapTokenOption[];
+  onValueChange: (symbol: string) => void;
+}) {
+  const selectedToken = tokens.find((token) => token.symbol === value) ?? null;
+  const [open, setOpen] = useState(false);
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger
+        render={(
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 w-full justify-between rounded-xl border-white/12 bg-zinc-900/80 px-3 text-sm text-zinc-100 hover:bg-zinc-900/90"
+          />
+        )}
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <SwapTokenIcon
+            symbol={selectedToken?.symbol ?? value}
+            imageUrl={selectedToken?.imageUrl ?? null}
+            className="size-5"
+          />
+          <span className="truncate">{selectedToken?.symbol ?? value}</span>
+        </span>
+        <ChevronDown className="size-4 text-zinc-400" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        sideOffset={6}
+        className="max-h-72 min-w-[220px] bg-zinc-950 text-zinc-100"
+      >
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{label} token</DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={value}
+            onValueChange={(nextSymbol) => {
+              onValueChange(nextSymbol);
+              setOpen(false);
+            }}
+          >
+            {tokens.map((token) => (
+              <DropdownMenuRadioItem key={`${label}-${token.symbol}`} value={token.symbol}>
+                <SwapTokenIcon
+                  symbol={token.symbol}
+                  imageUrl={token.imageUrl}
+                  className="size-5"
+                />
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-sm leading-none">{token.symbol}</span>
+                  <span className="mt-1 truncate text-xs text-zinc-400">{token.name}</span>
+                </span>
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 function getWalletPageIcon(pageId: WalletPage) {
   if (pageId === "home") {
@@ -350,6 +477,12 @@ function JarvisApp() {
   const [swapQuote, setSwapQuote] = useState<SwapQuoteResponse | null>(null);
   const [swapLoading, setSwapLoading] = useState(false);
   const [swapError, setSwapError] = useState<string | null>(null);
+  const swapQuoteAbortRef = useRef<AbortController | null>(null);
+  const swapQuoteCacheRef = useRef<Map<string, SwapQuoteResponse>>(new Map());
+  const [stakeOverview, setStakeOverview] = useState<StakeOverviewResponse | null>(null);
+  const [stakeLoading, setStakeLoading] = useState(false);
+  const [stakeError, setStakeError] = useState<string | null>(null);
+  const [stakeAmountInput, setStakeAmountInput] = useState("10");
   const [walletLoading, setWalletLoading] = useState(true);
   const [welcomeMode, setWelcomeMode] = useState<"first" | "returning">("first");
   const [welcomeReady, setWelcomeReady] = useState(false);
@@ -559,6 +692,56 @@ function JarvisApp() {
   }, []);
 
   useEffect(() => {
+    return () => {
+      swapQuoteAbortRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (walletPage !== "stake") {
+      return;
+    }
+
+    let active = true;
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/stake/overview", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error("Failed to load staking overview.");
+        }
+
+        const payload = (await response.json()) as unknown;
+        if (
+          !active
+          || typeof payload !== "object"
+          || payload === null
+          || !("apy" in payload)
+        ) {
+          return;
+        }
+
+        setStakeOverview(payload as StakeOverviewResponse);
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+        setStakeError(
+          error instanceof Error ? error.message : "Could not load staking overview.",
+        );
+      } finally {
+        if (active) {
+          setStakeLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [walletPage]);
+
+  useEffect(() => {
     if (!isReady) {
       return;
     }
@@ -675,6 +858,13 @@ function JarvisApp() {
   const activeSwapTokens = swapTokens.length > 0 ? swapTokens : FALLBACK_SWAP_TOKENS;
   const selectedSwapFrom = activeSwapTokens.find((token) => token.symbol === swapFromSymbol) ?? null;
   const selectedSwapTo = activeSwapTokens.find((token) => token.symbol === swapToSymbol) ?? null;
+  const numericStakeAmount = Number(stakeAmountInput);
+  const stakeAmountIsValid = Number.isFinite(numericStakeAmount) && numericStakeAmount > 0;
+  const numericStakeApy = stakeOverview?.apy ? Number.parseFloat(stakeOverview.apy) : 0;
+  const estimatedYearlyRewards = stakeAmountIsValid && Number.isFinite(numericStakeApy)
+    ? (numericStakeAmount * numericStakeApy) / 100
+    : 0;
+  const estimatedTsTon = stakeAmountIsValid ? numericStakeAmount : 0;
 
   useEffect(() => {
     if (!isListening && transcript.trim()) {
@@ -751,6 +941,10 @@ function JarvisApp() {
 
   const handleWalletPageChange = useCallback((nextPage: WalletPage) => {
     setWalletPage(nextPage);
+    if (nextPage === "stake") {
+      setStakeLoading(true);
+      setStakeError(null);
+    }
     if (nextPage !== "home") {
       setHomeMode("overview");
       stopListening();
@@ -840,6 +1034,23 @@ function JarvisApp() {
       return;
     }
 
+    const normalizedAmount = swapAmount.trim();
+    const quoteRequestKey = [
+      selectedSwapFrom.symbol,
+      selectedSwapTo.symbol,
+      normalizedAmount,
+    ].join(":");
+    const cachedQuote = swapQuoteCacheRef.current.get(quoteRequestKey);
+    if (cachedQuote) {
+      setSwapError(null);
+      setSwapQuote(cachedQuote);
+      return;
+    }
+
+    swapQuoteAbortRef.current?.abort();
+    const controller = new AbortController();
+    swapQuoteAbortRef.current = controller;
+
     setSwapLoading(true);
     setSwapError(null);
     setSwapQuote(null);
@@ -848,10 +1059,11 @@ function JarvisApp() {
       const response = await fetch("/api/swap/quote", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           offerTokenSymbol: selectedSwapFrom.symbol,
           askTokenSymbol: selectedSwapTo.symbol,
-          offerAmount: swapAmount,
+          offerAmount: normalizedAmount,
         }),
       });
 
@@ -868,13 +1080,27 @@ function JarvisApp() {
         throw new Error(message);
       }
 
-      setSwapQuote(payload as SwapQuoteResponse);
+      const quote = payload as SwapQuoteResponse;
+      swapQuoteCacheRef.current.set(quoteRequestKey, quote);
+      if (swapQuoteCacheRef.current.size > 16) {
+        const oldestKey = swapQuoteCacheRef.current.keys().next().value;
+        if (oldestKey) {
+          swapQuoteCacheRef.current.delete(oldestKey);
+        }
+      }
+      setSwapQuote(quote);
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
       setSwapError(
         error instanceof Error ? error.message : "Failed to fetch swap quote.",
       );
     } finally {
-      setSwapLoading(false);
+      if (swapQuoteAbortRef.current === controller) {
+        swapQuoteAbortRef.current = null;
+        setSwapLoading(false);
+      }
     }
   }, [selectedSwapFrom, selectedSwapTo, swapAmount]);
 
@@ -1074,21 +1300,16 @@ function JarvisApp() {
                 {swapTokensLoading ? (
                   <Skeleton className="h-11 rounded-xl bg-zinc-900/70" />
                 ) : (
-                  <select
-                    className="h-11 rounded-xl border border-white/12 bg-zinc-900/80 px-3 text-sm text-zinc-100 outline-none focus:border-cyan-200/40"
+                  <SwapTokenDropdown
+                    label="From"
                     value={swapFromSymbol}
-                    onChange={(event) => {
-                      setSwapFromSymbol(event.target.value);
+                    tokens={activeSwapTokens}
+                    onValueChange={(symbol) => {
+                      setSwapFromSymbol(symbol);
                       setSwapQuote(null);
                       setSwapError(null);
                     }}
-                  >
-                    {activeSwapTokens.map((token) => (
-                      <option key={`from-${token.symbol}`} value={token.symbol}>
-                        {token.symbol}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 )}
               </label>
               <label className="flex flex-col gap-1.5">
@@ -1096,21 +1317,16 @@ function JarvisApp() {
                 {swapTokensLoading ? (
                   <Skeleton className="h-11 rounded-xl bg-zinc-900/70" />
                 ) : (
-                  <select
-                    className="h-11 rounded-xl border border-white/12 bg-zinc-900/80 px-3 text-sm text-zinc-100 outline-none focus:border-cyan-200/40"
+                  <SwapTokenDropdown
+                    label="To"
                     value={swapToSymbol}
-                    onChange={(event) => {
-                      setSwapToSymbol(event.target.value);
+                    tokens={activeSwapTokens}
+                    onValueChange={(symbol) => {
+                      setSwapToSymbol(symbol);
                       setSwapQuote(null);
                       setSwapError(null);
                     }}
-                  >
-                    {activeSwapTokens.map((token) => (
-                      <option key={`to-${token.symbol}`} value={token.symbol}>
-                        {token.symbol}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 )}
               </label>
             </div>
@@ -1201,12 +1417,17 @@ function JarvisApp() {
                         key={step.id}
                         className="rounded-lg border border-white/10 bg-zinc-950/55 px-2.5 py-2 text-xs text-zinc-300"
                       >
-                        <p className="font-medium text-zinc-100">
-                          {step.fromSymbol} → {step.toSymbol}
+                        <p className="flex items-center gap-1.5 font-medium text-zinc-100">
+                          <span>{step.fromSymbol}</span>
+                          <ArrowRight className="size-3.5 text-zinc-400" />
+                          <span>{step.toSymbol}</span>
                         </p>
                         {step.chunks.map((chunk) => (
-                          <p key={chunk.id} className="mt-0.5 text-zinc-400">
-                            {chunk.protocol}: {chunk.offerAmount} → {chunk.askAmount}
+                          <p key={chunk.id} className="mt-0.5 flex items-center gap-1 text-zinc-400">
+                            <span>{chunk.protocol}:</span>
+                            <span>{chunk.offerAmount}</span>
+                            <ArrowRight className="size-3 text-zinc-500" />
+                            <span>{chunk.askAmount}</span>
                           </p>
                         ))}
                       </div>
@@ -1217,22 +1438,94 @@ function JarvisApp() {
             ) : (
               <div className="rounded-xl border border-white/10 bg-zinc-950/45 px-3 py-2.5 text-xs text-zinc-400">
                 Quote details will appear here for{" "}
-                {selectedSwapFrom?.symbol ?? swapFromSymbol} →{" "}
-                {selectedSwapTo?.symbol ?? swapToSymbol}.
+                <span className="inline-flex items-center gap-1">
+                  <span>{selectedSwapFrom?.symbol ?? swapFromSymbol}</span>
+                  <ArrowRight className="size-3 text-zinc-500" />
+                  <span>{selectedSwapTo?.symbol ?? swapToSymbol}</span>
+                </span>
+                .
               </div>
             )}
           </div>
         </section>
       ) : (
-        <section className="relative z-10 flex min-h-0 flex-1 flex-col justify-center overflow-hidden rounded-[22px] border border-emerald-300/15 bg-gradient-to-br from-zinc-950 via-zinc-950 to-emerald-950/35 px-6 text-left shadow-[0_18px_48px_rgba(0,0,0,0.35)]">
-          <p className="text-[0.72rem] font-medium tracking-[0.14em] text-emerald-200/75">Stake</p>
-          <h2 className="mt-2 text-[1.35rem] leading-tight font-semibold text-zinc-100">
-            Staking vaults are being prepared.
-          </h2>
-          <p className="mt-3 max-w-[28ch] text-sm leading-[1.55] text-zinc-300">
-            This area will have lock periods, APR, and reward tracking built specifically for staking.
-          </p>
-          <p className="mt-4 font-mono text-xs text-zinc-400">
+        <section className="relative z-10 flex min-h-0 flex-1 flex-col">
+          <div>
+            <p className="text-[0.72rem] font-medium tracking-[0.14em] text-emerald-200/75">Stake</p>
+            <h2 className="mt-1 text-[1.28rem] leading-tight font-semibold text-zinc-100">
+              TON liquid staking
+            </h2>
+            <p className="mt-2 text-sm leading-[1.55] text-zinc-300">
+              Start staking TON with Tonstakers and receive tsTON while your position accrues rewards.
+            </p>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-2.5">
+            <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-3">
+              <p className="text-[0.68rem] text-zinc-400">Current APY</p>
+              <p className="mt-1 text-sm font-semibold text-zinc-100">
+                {stakeLoading ? "..." : stakeOverview?.apy ?? "--"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-3">
+              <p className="text-[0.68rem] text-zinc-400">TVL</p>
+              <p className="mt-1 text-sm font-semibold text-zinc-100">
+                {stakeLoading ? "..." : `${stakeOverview?.tvlTon ?? "--"} TON`}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-3">
+              <p className="text-[0.68rem] text-zinc-400">Stakers</p>
+              <p className="mt-1 text-sm font-semibold text-zinc-100">
+                {stakeLoading ? "..." : stakeOverview?.stakersCount ?? "--"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-3">
+              <p className="text-[0.68rem] text-zinc-400">Min stake</p>
+              <p className="mt-1 text-sm font-semibold text-zinc-100">
+                {stakeLoading ? "..." : stakeOverview?.minStake ?? "--"}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-3 rounded-xl border border-white/10 bg-zinc-900/60 p-3">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[0.7rem] tracking-[0.08em] text-zinc-400">Stake amount (TON)</span>
+              <Input
+                className="h-11 rounded-xl border-white/12 bg-zinc-900/80 px-3 text-sm text-zinc-100 placeholder:text-zinc-500"
+                inputMode="decimal"
+                value={stakeAmountInput}
+                onChange={(event) => setStakeAmountInput(event.target.value)}
+                placeholder="10"
+              />
+            </label>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-zinc-400">
+              <p>Estimated tsTON: {estimatedTsTon.toFixed(4)}</p>
+              <p className="text-right">Projected yearly rewards: {estimatedYearlyRewards.toFixed(4)} TON</p>
+            </div>
+            <Button
+              type="button"
+              className="mt-3 h-11 w-full rounded-xl bg-white text-zinc-900 hover:bg-zinc-100"
+              disabled={!stakeAmountIsValid}
+              onClick={() => {
+                setWalletPage("home");
+                setHomeMode("chat");
+                sendMessage({
+                  text: `I want to stake ${stakeAmountInput} TON. Walk me through the safest way and required steps.`,
+                });
+              }}
+            >
+              Continue with staking assistant
+            </Button>
+          </div>
+
+          {stakeError && (
+            <div className="mt-3 rounded-xl border border-rose-300/30 bg-rose-900/20 px-3 py-2 text-sm text-rose-200">
+              {stakeError}
+            </div>
+          )}
+
+          <p className="mt-3 text-xs text-zinc-400">
+            Wallet:{" "}
             {walletAddress
               ? `${walletAddress.slice(0, 8)}…${walletAddress.slice(-6)}`
               : "Wallet pending"}

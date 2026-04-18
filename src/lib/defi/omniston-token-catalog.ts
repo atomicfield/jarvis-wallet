@@ -6,6 +6,7 @@ import { KNOWN_TOKENS } from "@/lib/defi/tokens";
 
 const DEFAULT_STON_API_URL = "https://api.ston.fi";
 const TOKEN_CATALOG_TTL_MS = 5 * 60 * 1000;
+const MAX_SWAP_TOKEN_OPTIONS = 18;
 
 export interface SwapTokenCatalogItem {
   symbol: string;
@@ -124,7 +125,7 @@ function buildCatalogFromCandidates(candidates: CandidateToken[]): SwapTokenCata
     });
   }
 
-  const tokens = Array.from(bySymbolCandidates.values())
+  const sortedTokens = Array.from(bySymbolCandidates.values())
     .sort((a, b) => {
       if (a.symbol === "TON") return -1;
       if (b.symbol === "TON") return 1;
@@ -138,6 +139,38 @@ function buildCatalogFromCandidates(candidates: CandidateToken[]): SwapTokenCata
       decimals: token.decimals,
       imageUrl: token.imageUrl,
     }));
+
+  const tokens: SwapTokenCatalogItem[] = [];
+  const seenSymbols = new Set<string>();
+  const prioritySymbols = [
+    "TON",
+    ...KNOWN_TOKENS.map((token) => token.symbol.toUpperCase()),
+  ];
+
+  for (const symbol of prioritySymbols) {
+    const match = sortedTokens.find((token) => token.symbol === symbol);
+    if (!match || seenSymbols.has(match.symbol)) {
+      continue;
+    }
+    tokens.push(match);
+    seenSymbols.add(match.symbol);
+    if (tokens.length >= MAX_SWAP_TOKEN_OPTIONS) {
+      break;
+    }
+  }
+
+  if (tokens.length < MAX_SWAP_TOKEN_OPTIONS) {
+    for (const token of sortedTokens) {
+      if (seenSymbols.has(token.symbol)) {
+        continue;
+      }
+      tokens.push(token);
+      seenSymbols.add(token.symbol);
+      if (tokens.length >= MAX_SWAP_TOKEN_OPTIONS) {
+        break;
+      }
+    }
+  }
 
   return {
     tokens,
