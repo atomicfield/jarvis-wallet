@@ -10,7 +10,7 @@ import { AuthProvider } from "@/context/auth";
 import { cn } from "@/lib/utils";
 
 const onest = Onest({
-  variable: "--font-sans",
+  variable: "--font-onest",
   subsets: ["latin"],
   weight: "variable",
 });

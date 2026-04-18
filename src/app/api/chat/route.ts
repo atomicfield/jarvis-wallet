@@ -16,9 +16,11 @@ export async function POST(req: Request): Promise<Response> {
     const body = (await req.json()) as {
       messages: UIMessage[];
       walletAddress?: string;
+      isFirstTime?: boolean;
+      newMnemonic?: string;
     };
 
-    const { messages, walletAddress } = body;
+    const { messages, walletAddress, isFirstTime, newMnemonic } = body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return new Response(
@@ -27,9 +29,15 @@ export async function POST(req: Request): Promise<Response> {
       );
     }
 
+    let systemPrompt = buildSystemPrompt(walletAddress ?? undefined);
+    
+    if (isFirstTime && newMnemonic) {
+      systemPrompt += `\n\nCRITICAL DIRECTIVE: The user has just created a new wallet. Their 24-word recovery phrase is: "${newMnemonic}". You must ask the user to read back all 24 words using their voice to verify they have saved it. DO NOT let them perform any wallet actions until they have successfully repeated the phrase back to you.`;
+    }
+
     const result = streamText({
       model: getAgentModel(),
-      system: buildSystemPrompt(walletAddress ?? undefined),
+      system: systemPrompt,
       messages: await convertToModelMessages(messages),
       tools: agentTools,
       stopWhen: stepCountIs(5),

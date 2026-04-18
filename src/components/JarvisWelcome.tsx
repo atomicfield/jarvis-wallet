@@ -1,13 +1,7 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 
 interface JarvisWelcomeProps {
   firstName: string;
@@ -21,88 +15,51 @@ interface JarvisWelcomeProps {
 export function JarvisWelcome({
   firstName,
   isReturning,
-  isTelegram,
-  isWalletReady,
-  authState,
-  authError,
 }: JarvisWelcomeProps) {
-  const eyebrow = isReturning ? "Welcome back" : "Welcome";
-  const primaryCopy = isReturning
-    ? "Your wallet, Telegram session, and voice controls are standing by."
-    : "I'm Jarvis, your personal AI wallet assistant.";
-  const secondaryCopy = isReturning
-    ? "Pick up where you left off or speak to start a new move on TON."
-    : "Let's get you initialized and ready to manage TON with voice or chat.";
+  const [step, setStep] = useState<0 | 1 | 2>(isReturning ? 2 : 0);
+
+  useEffect(() => {
+    if (isReturning) return;
+    const timer1 = setTimeout(() => setStep(1), 2500);
+    const timer2 = setTimeout(() => setStep(2), 3000);
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+    };
+  }, [isReturning]);
 
   return (
-    <Card className="jarvis-welcome-panel border-border/50 bg-card/60 backdrop-blur-xl">
-      <CardHeader className="gap-2">
-        <span className="jarvis-welcome-eyebrow">{eyebrow}</span>
-        <CardTitle className="jarvis-welcome-title">
-          Hi, {firstName}.
-        </CardTitle>
-        <CardDescription className="jarvis-welcome-lead text-foreground/90">
-          {primaryCopy}
-        </CardDescription>
-        <p className="text-sm text-muted-foreground leading-relaxed max-w-[28rem]">
-          {secondaryCopy}
-        </p>
-      </CardHeader>
+    <div className="flex flex-col items-center justify-center text-center min-h-[160px] relative px-4">
+      <h1
+        className={cn(
+          "absolute font-sans text-3xl font-semibold tracking-tight transition-all duration-500",
+          step === 0 ? "opacity-100 transform translate-y-0" : "opacity-0 transform -translate-y-2 pointer-events-none"
+        )}
+      >
+        Welcome, {firstName}.
+      </h1>
+      
+      <h1
+        className={cn(
+          "absolute font-sans text-2xl font-semibold tracking-tight transition-all duration-500 leading-tight text-foreground/90",
+          step === 2 && !isReturning ? "opacity-100 transform translate-y-0" : "opacity-0 transform translate-y-2 pointer-events-none",
+          isReturning && step === 2 && "hidden"
+        )}
+      >
+        I&apos;m Jarvis, your personal wallet assistant on TON.
+      </h1>
 
-      <CardContent className="flex flex-col gap-4">
-        <div className="flex flex-wrap gap-2" aria-label="Initialization status">
-          <StatusBadge
-            label={isTelegram ? "Telegram live" : "Browser preview"}
-            tone={isTelegram ? "active" : "muted"}
-          />
-          <StatusBadge label="Gemini core" tone="active" />
-          <StatusBadge
-            label={isWalletReady ? "Wallet secured" : "Wallet loading"}
-            tone={isWalletReady ? "active" : "pending"}
-          />
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm text-muted-foreground">
-            {authState === "authenticated" && "Telegram identity linked"}
-            {authState === "authenticating" && "Linking your Telegram identity"}
-            {authState === "error" && "Telegram auth needs attention"}
-            {authState === "idle" && "Awaiting Telegram session"}
-          </span>
-          {authError && (
-            <span className="text-sm text-destructive">{authError}</span>
+      {isReturning && (
+        <h1
+          className={cn(
+            "absolute font-sans text-2xl font-semibold tracking-tight transition-all duration-500 leading-tight",
+            step === 2 ? "opacity-100 transform translate-y-0" : "opacity-0 pointer-events-none"
           )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function StatusBadge({
-  label,
-  tone,
-}: {
-  label: string;
-  tone: "active" | "pending" | "muted";
-}) {
-  const variantMap = {
-    active: "default" as const,
-    pending: "secondary" as const,
-    muted: "outline" as const,
-  };
-
-  return (
-    <Badge
-      variant={variantMap[tone]}
-      className={
-        tone === "active"
-          ? "bg-primary/15 text-primary border-primary/20 hover:bg-primary/20"
-          : tone === "pending"
-            ? "bg-[#f4d18f]/10 text-[#ffe4b2] border-[#f4d18f]/20"
-            : ""
-      }
-    >
-      {label}
-    </Badge>
+        >
+          Welcome back, {firstName}.<br/>
+          <span className="text-muted-foreground text-lg font-medium mt-2 block">Ready for your next move.</span>
+        </h1>
+      )}
+    </div>
   );
 }
