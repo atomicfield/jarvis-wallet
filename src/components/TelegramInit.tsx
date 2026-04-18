@@ -51,7 +51,8 @@ export function useTelegram() {
 
 const FULLSCREEN_VERSION = "8.0";
 const SWIPES_VERSION = "7.7";
-const APP_CHROME_COLOR = "#050916";
+const APP_CHROME_COLOR = "#000000";
+const TELEGRAM_MOBILE_PLATFORMS = new Set(["android", "ios"]);
 const DEFAULT_CONTEXT: TelegramContextValue = {
   isReady: false,
   isTelegram: false,
@@ -121,6 +122,33 @@ function applyTelegramChrome(tg: TelegramWebApp) {
   }
 }
 
+function isMobileBrowserDevice(): boolean {
+  const ua = navigator.userAgent.toLowerCase();
+  const isMobileUa = /android|iphone|ipad|ipod|mobile/.test(ua);
+  const isTouchDevice = navigator.maxTouchPoints > 1;
+  return isMobileUa || isTouchDevice;
+}
+
+function shouldUseMobileFullscreen(tg: TelegramWebApp): boolean {
+  const platform = (tg.platform ?? "").toLowerCase();
+
+  if (TELEGRAM_MOBILE_PLATFORMS.has(platform)) {
+    return true;
+  }
+
+  if (
+    platform === "tdesktop" ||
+    platform === "macos" ||
+    platform === "web" ||
+    platform === "weba" ||
+    platform === "webk"
+  ) {
+    return false;
+  }
+
+  return isMobileBrowserDevice();
+}
+
 function getInitialTelegramContext(): TelegramContextValue {
   if (typeof window === "undefined") {
     return DEFAULT_CONTEXT;
@@ -167,7 +195,11 @@ export function TelegramInit({ children }: { children: ReactNode }) {
     tg.ready();
     applyTelegramChrome(tg);
 
-    tg.expand();
+    const shouldUseFullscreen = shouldUseMobileFullscreen(tg);
+
+    if (shouldUseFullscreen) {
+      tg.expand();
+    }
     try {
       tg.enableClosingConfirmation();
     } catch {
@@ -197,17 +229,27 @@ export function TelegramInit({ children }: { children: ReactNode }) {
     };
 
     const handleFullscreenFailed = () => {
-      tg.expand();
+      if (shouldUseFullscreen) {
+        tg.expand();
+      }
       syncState();
     };
 
     requestAnimationFrame(syncState);
 
-    if (tg.isVersionAtLeast(FULLSCREEN_VERSION) && !tg.isFullscreen) {
-      try {
-        tg.requestFullscreen();
-      } catch {
-        tg.expand();
+    if (tg.isVersionAtLeast(FULLSCREEN_VERSION)) {
+      if (shouldUseFullscreen && !tg.isFullscreen) {
+        try {
+          tg.requestFullscreen();
+        } catch {
+          tg.expand();
+        }
+      } else if (!shouldUseFullscreen && tg.isFullscreen) {
+        try {
+          tg.exitFullscreen();
+        } catch {
+          // Ignore Telegram clients that do not allow exiting fullscreen here.
+        }
       }
     }
 
@@ -264,7 +306,13 @@ export function TelegramInit({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [currentUser, ctx.initData, ctx.isReady, ctx.isTelegram, loginWithTelegram]);
+  }, [
+    currentUser,
+    ctx.initData,
+    ctx.isReady,
+    ctx.isTelegram,
+    loginWithTelegram,
+  ]);
 
   const value: TelegramContextValue = {
     ...ctx,

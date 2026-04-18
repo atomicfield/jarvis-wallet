@@ -31,19 +31,23 @@ export function WalletBar({ address, balance, isConnected }: WalletBarProps) {
   };
 
   return (
-    <div className="wallet-bar">
-      <div className="wallet-bar-left">
+    <div className="relative z-10 flex items-center justify-between gap-3 rounded-[18px] border border-white/10 bg-zinc-900/85 p-3 shadow-[0_14px_36px_rgba(0,0,0,0.24)] backdrop-blur-xl">
+      <div className="flex items-center gap-2">
         <span
-          className={`wallet-status-dot ${isConnected ? "connected" : "disconnected"}`}
+          className={`size-2 shrink-0 rounded-full ${
+            isConnected
+              ? "bg-zinc-200 shadow-[0_0_12px_rgba(255,255,255,0.4)]"
+              : "bg-white/20"
+          }`}
         />
-        <div className="wallet-meta">
-          <span className="wallet-label">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-[0.64rem] font-medium tracking-[0.18em] uppercase text-zinc-500">
             {isConnected ? "Wallet connected" : "Wallet unavailable"}
           </span>
           <Button
             variant="ghost"
             size="sm"
-            className="wallet-address-trigger h-auto justify-start px-0 py-0 font-mono text-xs text-foreground/90 hover:bg-transparent hover:text-foreground"
+            className="h-auto max-w-[170px] justify-start overflow-hidden px-0 py-0 font-mono text-xs text-ellipsis whitespace-nowrap text-foreground/90 hover:bg-transparent hover:text-foreground max-sm:max-w-[132px]"
             onClick={handleCopy}
             title={address ?? "No wallet"}
           >
@@ -52,9 +56,12 @@ export function WalletBar({ address, balance, isConnected }: WalletBarProps) {
         </div>
       </div>
 
-      <div className="wallet-bar-right">
+      <div className="flex items-center gap-2">
         {balance ? (
-          <Badge variant="secondary" className="wallet-balance-badge">
+          <Badge
+            variant="secondary"
+            className="gap-1.5 rounded-full border border-white/15 bg-white/10 font-mono text-[0.74rem] tracking-[0.02em] text-zinc-100"
+          >
             <svg
               width="14"
               height="14"
@@ -65,12 +72,15 @@ export function WalletBar({ address, balance, isConnected }: WalletBarProps) {
               strokeLinecap="round"
               strokeLinejoin="round"
             >
-              <path d="M6 3h12l4 6-10 13L2 9z" />
+            <path d="M6 3h12l4 6-10 13L2 9z" />
             </svg>
             {balance} TON
           </Badge>
         ) : (
-          <Badge variant="outline" className="wallet-balance-badge muted">
+          <Badge
+            variant="outline"
+            className="rounded-full border-white/15 bg-white/5 font-mono text-[0.74rem] tracking-[0.02em] text-zinc-300"
+          >
             Balance pending
           </Badge>
         )}

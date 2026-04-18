@@ -11,6 +11,7 @@ import {
   Wallet,
   Zap,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface ChatThreadProps {
   messages: UIMessage[];
@@ -32,8 +33,8 @@ export function ChatThread({ messages, isLoading }: ChatThreadProps) {
 
   if (messages.length === 0 && !isLoading) {
     return (
-      <div className="chat-empty">
-        <p className="chat-empty-text">
+      <div className="relative z-10 grid flex-1 place-items-center px-3 pb-[calc(84px+var(--tg-content-safe-area-inset-bottom))]">
+        <p className="m-0 max-w-80 text-center leading-7 text-zinc-300">
           Say something like &ldquo;What&rsquo;s my balance?&rdquo; or
           &ldquo;Swap 5 TON to USDT&rdquo;
         </p>
@@ -42,15 +43,18 @@ export function ChatThread({ messages, isLoading }: ChatThreadProps) {
   }
 
   return (
-    <div className="chat-thread" ref={scrollRef}>
+    <div
+      className="relative z-10 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-0.5 pt-2 pb-[calc(16px+var(--tg-content-safe-area-inset-bottom))] [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.14)_transparent]"
+      ref={scrollRef}
+    >
       {messages.map((msg) => (
         <MessageBubble key={msg.id} message={msg} />
       ))}
       {isLoading && (
-        <div className="chat-typing">
-          <div className="typing-dot" />
-          <div className="typing-dot" />
-          <div className="typing-dot" />
+        <div className="inline-flex w-fit items-center gap-1.5 self-start rounded-[18px] border border-white/10 bg-zinc-900/80 px-4 py-3 backdrop-blur-xl">
+          <div className="size-1.5 animate-bounce rounded-full bg-zinc-300 [animation-delay:0ms]" />
+          <div className="size-1.5 animate-bounce rounded-full bg-zinc-300 [animation-delay:120ms]" />
+          <div className="size-1.5 animate-bounce rounded-full bg-zinc-300 [animation-delay:240ms]" />
         </div>
       )}
     </div>
@@ -61,11 +65,24 @@ function MessageBubble({ message }: { message: UIMessage }) {
   const isUser = message.role === "user";
 
   return (
-    <div className={`chat-bubble ${isUser ? "user" : "assistant"}`}>
+    <div
+      className={cn(
+        "w-fit max-w-[min(88%,520px)] animate-in fade-in slide-in-from-bottom-2 duration-200 max-sm:max-w-[92%]",
+        isUser
+          ? "self-end rounded-[18px_18px_8px_18px] border border-white/15 bg-zinc-800/90 px-3.5 py-3"
+          : "self-start rounded-[18px_18px_18px_8px] border border-white/10 bg-zinc-900/80 px-3.5 py-3 backdrop-blur-xl",
+      )}
+    >
       {message.parts.map((part, i) => {
         if (part.type === "text" && part.text) {
           return (
-            <p key={i} className="chat-text">
+            <p
+              key={i}
+              className={cn(
+                "m-0 whitespace-pre-wrap leading-6",
+                isUser ? "text-zinc-100" : "text-foreground",
+              )}
+            >
               {part.text}
             </p>
           );
@@ -108,15 +125,24 @@ function ToolCard({
   const data = output;
 
   return (
-    <div className={`tool-card ${isComplete ? "complete" : "pending"}`}>
-      <div className="tool-card-header">
-        <span className="tool-icon">{getToolIcon(toolName)}</span>
-        <span className="tool-name">{getToolLabel(toolName)}</span>
-        {!isComplete && <span className="tool-spinner" />}
+    <div
+      className={cn(
+        "mt-2.5 overflow-hidden rounded-2xl border bg-zinc-900/75",
+        isComplete ? "border-white/20" : "border-white/10",
+      )}
+    >
+      <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2.5 text-[0.74rem] tracking-[0.12em] uppercase text-zinc-300">
+        <span className="inline-flex items-center justify-center text-zinc-200">
+          {getToolIcon(toolName)}
+        </span>
+        <span className="flex-1">{getToolLabel(toolName)}</span>
+        {!isComplete && (
+          <span className="size-3 animate-spin rounded-full border-2 border-white/20 border-t-zinc-100" />
+        )}
       </div>
 
       {isComplete && data && (
-        <div className="tool-card-body">
+        <div className="px-3 pt-2 pb-3">
           {toolName === "check_balance" && <BalanceResult data={data} />}
           {toolName === "swap_tokens" && <SwapResult data={data} />}
           {(toolName === "stake_ton" || toolName === "unstake_ton") && (
@@ -136,15 +162,15 @@ function BalanceResult({ data }: { data: Record<string, unknown> }) {
     balance: string;
   }>;
   return (
-    <div className="tool-result">
-      <div className="tool-result-row highlight">
-        <span>💎 TON</span>
-        <span>{String(data.tonBalance)}</span>
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between gap-3 text-[0.86rem] text-zinc-300">
+        <span>TON</span>
+        <span className="text-right font-mono text-zinc-100">{String(data.tonBalance)}</span>
       </div>
       {jettons.map((j) => (
-        <div key={j.symbol} className="tool-result-row">
+        <div key={j.symbol} className="flex items-center justify-between gap-3 text-[0.86rem] text-zinc-300">
           <span>{j.symbol}</span>
-          <span>{j.balance}</span>
+          <span className="text-right font-mono text-foreground">{j.balance}</span>
         </div>
       ))}
     </div>
@@ -153,47 +179,27 @@ function BalanceResult({ data }: { data: Record<string, unknown> }) {
 
 function SwapResult({ data }: { data: Record<string, unknown> }) {
   return (
-    <div className="tool-result">
-      <div className="tool-result-row">
-        <span>From</span>
-        <span>{String(data.from)}</span>
-      </div>
-      <div className="tool-result-row highlight">
-        <span>To</span>
-        <span>{String(data.to)}</span>
-      </div>
-      <div className="tool-result-row">
-        <span>Min. Received</span>
-        <span>{String(data.minimumReceived)}</span>
-      </div>
-      <div className="tool-result-row">
-        <span>Rate</span>
-        <span>{String(data.swapRate)}</span>
-      </div>
-      <div className="tool-result-row">
-        <span>Price Impact</span>
-        <span>{String(data.priceImpact)}</span>
-      </div>
+    <div className="flex flex-col gap-1.5">
+      <ResultRow label="From" value={String(data.from)} />
+      <ResultRow label="To" value={String(data.to)} highlight />
+      <ResultRow label="Min. Received" value={String(data.minimumReceived)} />
+      <ResultRow label="Rate" value={String(data.swapRate)} />
+      <ResultRow label="Price Impact" value={String(data.priceImpact)} />
     </div>
   );
 }
 
 function StakeResult({ data }: { data: Record<string, unknown> }) {
   return (
-    <div className="tool-result">
-      <div className="tool-result-row highlight">
-        <span>{data.action === "stake" ? "Stake" : "Unstake"}</span>
-        <span>{String(data.amount)}</span>
-      </div>
-      <div className="tool-result-row">
-        <span>Will Receive</span>
-        <span>{String(data.willReceive)}</span>
-      </div>
+    <div className="flex flex-col gap-1.5">
+      <ResultRow
+        label={data.action === "stake" ? "Stake" : "Unstake"}
+        value={String(data.amount)}
+        highlight
+      />
+      <ResultRow label="Will Receive" value={String(data.willReceive)} />
       {!!data.currentApy && (
-        <div className="tool-result-row">
-          <span>APY</span>
-          <span>{String(data.currentApy)}</span>
-        </div>
+        <ResultRow label="APY" value={String(data.currentApy)} />
       )}
     </div>
   );
@@ -201,34 +207,38 @@ function StakeResult({ data }: { data: Record<string, unknown> }) {
 
 function StakingInfoResult({ data }: { data: Record<string, unknown> }) {
   return (
-    <div className="tool-result">
-      <div className="tool-result-row highlight">
-        <span>APY</span>
-        <span>{String(data.apy)}</span>
-      </div>
-      <div className="tool-result-row">
-        <span>TVL</span>
-        <span>{String(data.tvlTon)}</span>
-      </div>
-      <div className="tool-result-row">
-        <span>Rate</span>
-        <span>{String(data.tstonRate)}</span>
-      </div>
-      <div className="tool-result-row">
-        <span>Min. Stake</span>
-        <span>{String(data.minStake)}</span>
-      </div>
+    <div className="flex flex-col gap-1.5">
+      <ResultRow label="APY" value={String(data.apy)} highlight />
+      <ResultRow label="TVL" value={String(data.tvlTon)} />
+      <ResultRow label="Rate" value={String(data.tstonRate)} />
+      <ResultRow label="Min. Stake" value={String(data.minStake)} />
     </div>
   );
 }
 
 function PriceResult({ data }: { data: Record<string, unknown> }) {
   return (
-    <div className="tool-result">
-      <div className="tool-result-row highlight">
-        <span>{String(data.symbol)}</span>
-        <span>{String(data.priceUsd)}</span>
-      </div>
+    <div className="flex flex-col gap-1.5">
+      <ResultRow label={String(data.symbol)} value={String(data.priceUsd)} highlight />
+    </div>
+  );
+}
+
+function ResultRow({
+  label,
+  value,
+  highlight = false,
+}: {
+  label: string;
+  value: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 text-[0.86rem] text-zinc-300">
+      <span>{label}</span>
+      <span className={cn("text-right font-mono", highlight ? "text-zinc-100" : "text-foreground")}>
+        {value}
+      </span>
     </div>
   );
 }

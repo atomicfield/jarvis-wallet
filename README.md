@@ -1,13 +1,13 @@
 ## Jarvis Wallet
 
-Voice-first TON DeFi wallet for Telegram managed bots, built with Next.js and deployed on Vercel.
+Voice-first TON DeFi wallet for Telegram, built with Next.js and deployed on Vercel.
 
 ### Stack (current)
 
 - Next.js 16 (App Router, TypeScript, Tailwind CSS)
 - Firebase Firestore (`firebase`, `firebase-admin`) for app data
 - Google Gemini via Vercel AI SDK for Jarvis agent responses
-- Planned integrations: Telegram managed bots, STON.fi, Tonstakers, AI agent APIs
+- Planned integrations: STON.fi, Tonstakers, AI agent APIs
 
 ## Firebase setup
 
@@ -34,17 +34,13 @@ Voice-first TON DeFi wallet for Telegram managed bots, built with Next.js and de
 - `FIREBASE_CLIENT_EMAIL`
 - `FIREBASE_PRIVATE_KEY`
 
-### Telegram managed bots
+### Telegram bot
 
-- `TELEGRAM_MANAGER_BOT_TOKEN`
-- `TELEGRAM_MANAGER_BOT_USERNAME`
+- `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_WEBHOOK_SECRET_TOKEN`
-- `TELEGRAM_MINI_APP_URL`
-- `APP_BASE_URL`
 
 ### Secrets
 
-- `MANAGED_BOT_TOKEN_ENCRYPTION_KEY_BASE64` (must decode to 32 bytes for AES-256-GCM)
 - `GOOGLE_GENERATIVE_AI_API_KEY` or `GEMINI_API_KEY`
 - `JARVIS_AGENT_MODEL` (optional, defaults to `gemini-flash-latest`)
 
@@ -64,7 +60,6 @@ Open `http://localhost:3000`.
 
 ## Webhook endpoint
 
-- Manager bot webhook: `POST /api/webhook`
-- Managed bot webhook URL pattern: `POST /api/webhook?managedBotId=<BOT_USER_ID>`
+- Bot webhook: `POST /api/webhook`
 
-The manager route handles `/start`, `managed_bot` updates, fetches managed bot tokens through `getManagedBotToken`, stores encrypted tokens in Firestore, and configures each managed bot webhook/menu.
+The webhook route handles `/start`, `/help`, and forwards plain-text user requests to the AI agent.

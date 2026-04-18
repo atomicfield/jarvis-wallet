@@ -3,6 +3,7 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
+import { AnimatePresence, motion } from "framer-motion";
 
 import { ChatThread } from "@/components/ChatThread";
 import { JarvisWelcome } from "@/components/JarvisWelcome";
@@ -13,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useTTS } from "@/hooks/useTTS";
 import { useVoice } from "@/hooks/useVoice";
+import { cn } from "@/lib/utils";
 import {
   generateWallet,
   loadWalletFromSecureStorage,
@@ -26,6 +28,47 @@ const QUICK_PROMPTS = [
 ] as const;
 
 const WELCOME_STORAGE_NAMESPACE = "jarvis:welcome:v1";
+const APP_SHELL_CLASS =
+  "relative mx-auto flex h-[var(--tg-viewport-height)] min-h-dvh w-full max-w-[480px] flex-col overflow-hidden px-[max(16px,calc(var(--tg-safe-area-inset-left)+16px))] pt-[calc(var(--tg-safe-area-inset-top)+10px)] pb-[max(14px,calc(var(--tg-safe-area-inset-bottom)+14px))] pr-[max(16px,calc(var(--tg-safe-area-inset-right)+16px))]";
+const LOADER_MESSAGES = [
+  "Preparing for an agentic future...",
+  "Readying your wallet...",
+  "Polishing experiences...",
+  "Initializing intelligence...",
+  "Waking Jarvis up...",
+] as const;
+
+function InitialLoader() {
+  const [messageIndex, setMessageIndex] = useState(0);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setMessageIndex((current) => (current + 1) % LOADER_MESSAGES.length);
+    }, 1800);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  return (
+    <div className="relative z-10 flex w-full max-w-[480px] flex-col items-center justify-center gap-6 px-6 text-center">
+      <div className="size-11 animate-spin rounded-full border-2 border-zinc-700 border-t-zinc-100" />
+      <div className="min-h-7">
+        <AnimatePresence mode="wait">
+          <motion.p
+            key={LOADER_MESSAGES[messageIndex]}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.45, ease: "easeInOut" }}
+            className="m-0 text-[0.95rem] leading-[1.6] text-zinc-300"
+          >
+            {LOADER_MESSAGES[messageIndex]}
+          </motion.p>
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
 
 function getWelcomeStorageKey(userId?: number) {
   return `${WELCOME_STORAGE_NAMESPACE}:${userId ?? "guest"}`;
@@ -303,35 +346,25 @@ function JarvisApp() {
 
   if (!isReady || walletLoading || !welcomeReady) {
     return (
-      <div className="app-container app-loading-screen">
-        <div className="app-loading-mark">
-          <Badge variant="secondary" className="text-[11px] tracking-widest uppercase">
-            {!isReady ? "Opening session" : walletLoading ? "Securing wallet" : "Preparing welcome"}
-          </Badge>
-          <h1 className="app-loading-title">Jarvis</h1>
-          <p className="app-loading-body">
-            {!isReady && "Connecting to Telegram and calibrating the viewport."}
-            {isReady && walletLoading && "Checking Telegram secure storage and loading your wallet."}
-            {isReady && !walletLoading && "Setting your personalized welcome state."}
-          </p>
-        </div>
+      <div className={cn(APP_SHELL_CLASS, "items-center justify-center")}>
+        <InitialLoader />
       </div>
     );
   }
 
   return (
-    <div className="app-container">
+    <div className={cn(APP_SHELL_CLASS, "gap-3")}>
       <WalletBar
         address={walletAddress}
         balance={walletBalance}
         isConnected={Boolean(walletAddress)}
       />
 
-      <div className="view-toggle">
+      <div className="relative z-10 inline-flex self-center rounded-full border border-white/10 bg-zinc-900/70 p-1 backdrop-blur-xl">
         <Button
           variant={view === "voice" ? "secondary" : "ghost"}
           size="sm"
-          className="view-toggle-button"
+          className="min-w-[86px] rounded-full text-[0.7rem] font-semibold tracking-[0.16em] uppercase max-sm:min-w-[74px]"
           onClick={() => setView("voice")}
         >
           Voice
@@ -339,7 +372,7 @@ function JarvisApp() {
         <Button
           variant={view === "chat" ? "secondary" : "ghost"}
           size="sm"
-          className="view-toggle-button"
+          className="min-w-[86px] rounded-full text-[0.7rem] font-semibold tracking-[0.16em] uppercase max-sm:min-w-[74px]"
           onClick={() => setView("chat")}
         >
           Chat
@@ -347,12 +380,14 @@ function JarvisApp() {
       </div>
 
       {inlineNotice && (
-        <div className="app-inline-notice">{inlineNotice}</div>
+        <div className="relative z-10 rounded-[14px] border border-white/10 bg-zinc-900/80 px-3 py-2.5 text-[0.8rem] leading-[1.4] text-zinc-300">
+          {inlineNotice}
+        </div>
       )}
 
       {view === "voice" ? (
-        <section className="voice-view">
-          <div className="voice-welcome-stack">
+        <section className="relative z-10 flex min-h-0 flex-1 flex-col gap-3">
+          <div className="flex flex-col gap-2">
             <JarvisWelcome
               firstName={firstName}
               isReturning={welcomeMode === "returning"}
@@ -363,13 +398,17 @@ function JarvisApp() {
             />
 
             {welcomeMode === "first" && newMnemonic && (
-              <div className="recovery-panel animate-in fade-in slide-in-from-bottom-4 duration-700 delay-1000 fill-mode-both">
-                <p className="recovery-panel-copy">
+              <div className="rounded-[18px] border border-white/10 bg-zinc-900/70 p-3 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-1000 fill-mode-both">
+                <p className="mb-2 text-[0.8rem] leading-[1.45] text-zinc-300">
                   Your wallet was created. Say each recovery word back to verify it.
                 </p>
-                <div className="recovery-words-grid">
+                <div className="flex flex-wrap gap-1.5">
                   {newMnemonic.map((word) => (
-                    <Badge key={word} variant="secondary" className="recovery-word-chip">
+                    <Badge
+                      key={word}
+                      variant="secondary"
+                      className="border border-white/15 bg-white/5 font-mono text-[0.72rem] text-zinc-200"
+                    >
                       {word}
                     </Badge>
                   ))}
@@ -378,14 +417,14 @@ function JarvisApp() {
             )}
           </div>
 
-          <div className="quick-prompt-row">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {QUICK_PROMPTS.map((prompt) => (
               <Button
                 key={prompt}
                 variant="outline"
                 size="sm"
                 type="button"
-                className="quick-prompt-pill"
+                className="h-auto min-h-11 justify-start rounded-[14px] border-white/10 bg-zinc-900/70 px-3 py-2.5 text-left leading-[1.35] text-zinc-300 whitespace-normal hover:border-white/20 hover:bg-zinc-800/70 hover:text-foreground"
                 disabled={isLoading}
                 onClick={() => handleQuickPrompt(prompt)}
               >
@@ -404,14 +443,19 @@ function JarvisApp() {
         <>
           <ChatThread messages={messages} isLoading={isLoading} />
 
-          <div className="chat-fab-wrap">
+          <div className="pointer-events-none absolute right-[max(16px,calc(var(--tg-safe-area-inset-right)+16px))] bottom-[calc(92px+var(--tg-content-safe-area-inset-bottom))] z-20">
             <Button
               size="icon-lg"
-              className={`voice-orb chat-fab ${displayOrbState} rounded-full`}
+              className={cn(
+                "pointer-events-auto size-12 rounded-full border-0 text-foreground shadow-[0_24px_60px_rgba(2,6,16,0.55)] transition-transform duration-200 active:scale-95",
+                displayOrbState === "listening"
+                  ? "bg-zinc-700"
+                  : "bg-zinc-800",
+              )}
               onClick={handleOrbPress}
               aria-label="Voice input"
             >
-              <div className="orb-inner" style={{ transform: "scale(0.6)" }}>
+              <div className="text-zinc-100" style={{ transform: "scale(0.6)" }}>
                 {displayOrbState === "listening" ? (
                   <svg
                     width="32"
@@ -422,11 +466,11 @@ function JarvisApp() {
                     strokeWidth="2.5"
                     strokeLinecap="round"
                   >
-                    <line x1="4" y1="8" x2="4" y2="16" className="wave-bar wave-1" />
-                    <line x1="8" y1="5" x2="8" y2="19" className="wave-bar wave-2" />
-                    <line x1="12" y1="3" x2="12" y2="21" className="wave-bar wave-3" />
-                    <line x1="16" y1="5" x2="16" y2="19" className="wave-bar wave-4" />
-                    <line x1="20" y1="8" x2="20" y2="16" className="wave-bar wave-5" />
+                    <line x1="4" y1="8" x2="4" y2="16" className="origin-center animate-pulse motion-reduce:animate-none [animation-delay:0ms]" />
+                    <line x1="8" y1="5" x2="8" y2="19" className="origin-center animate-pulse motion-reduce:animate-none [animation-delay:80ms]" />
+                    <line x1="12" y1="3" x2="12" y2="21" className="origin-center animate-pulse motion-reduce:animate-none [animation-delay:160ms]" />
+                    <line x1="16" y1="5" x2="16" y2="19" className="origin-center animate-pulse motion-reduce:animate-none [animation-delay:240ms]" />
+                    <line x1="20" y1="8" x2="20" y2="16" className="origin-center animate-pulse motion-reduce:animate-none [animation-delay:320ms]" />
                   </svg>
                 ) : (
                   <svg
@@ -448,9 +492,12 @@ function JarvisApp() {
             </Button>
           </div>
 
-          <form className="text-input-bar" onSubmit={handleTextSubmit}>
+          <form
+            className="relative z-10 mt-1 flex items-center gap-2.5 rounded-[22px] border border-white/10 bg-zinc-900/85 p-3 backdrop-blur-xl"
+            onSubmit={handleTextSubmit}
+          >
             <input
-              className="text-input"
+              className="h-11 flex-1 rounded-2xl border-0 bg-white/5 px-3.5 text-foreground outline-none placeholder:text-zinc-500"
               type="text"
               placeholder="Ask Jarvis anything about your wallet..."
               value={textInput}
@@ -458,7 +505,7 @@ function JarvisApp() {
             />
             <Button
               size="icon"
-              className="send-button rounded-full"
+              className="size-[42px] rounded-full border-0 bg-zinc-200 text-zinc-900 shadow-[0_12px_30px_rgba(255,255,255,0.12)] transition-transform duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none"
               type="submit"
               disabled={!textInput.trim() || isLoading}
             >

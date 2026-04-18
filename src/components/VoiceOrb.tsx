@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 
 export type OrbState = "idle" | "listening" | "processing" | "speaking" | "error";
 
@@ -87,22 +88,60 @@ export function VoiceOrb({ state, onPress, transcript }: VoiceOrbProps) {
   }, [state]);
 
   return (
-    <div className="voice-orb-container" style={{ "--mic-vol": volume } as React.CSSProperties}>
-      {/* Ambient glow rings */}
-      <div className={`orb-ring orb-ring-1 ${state}`} />
-      <div className={`orb-ring orb-ring-2 ${state}`} />
-      <div className={`orb-ring orb-ring-3 ${state}`} />
+    <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-3 py-[calc(8px+var(--tg-content-safe-area-inset-bottom))]">
+      <div
+        className={cn(
+          "pointer-events-none absolute rounded-full border border-white/15",
+          state === "listening"
+            ? "size-[188px] animate-ping opacity-100 motion-reduce:animate-none"
+            : "size-[188px] opacity-0",
+        )}
+      />
+      <div
+        className={cn(
+          "pointer-events-none absolute rounded-full border border-white/10 [animation-delay:200ms]",
+          state === "listening"
+            ? "size-[236px] animate-ping opacity-100 motion-reduce:animate-none"
+            : "size-[236px] opacity-0",
+        )}
+      />
+      <div
+        className={cn(
+          "pointer-events-none absolute rounded-full border border-white/10 [animation-delay:400ms]",
+          state === "listening"
+            ? "size-[282px] animate-ping opacity-100 motion-reduce:animate-none"
+            : "size-[282px] opacity-0",
+        )}
+      />
 
-      {/* Main orb button */}
       <button
         id="voice-orb-button"
-        className={`voice-orb ${state}`}
+        className={cn(
+          "relative grid size-[154px] place-items-center rounded-full border-0 text-foreground shadow-[0_32px_80px_rgba(2,6,16,0.48),0_0_0_1px_rgba(255,255,255,0.08),inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform duration-200 ease-out active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300/60",
+          state === "idle" &&
+            "bg-zinc-800 motion-safe:animate-pulse motion-reduce:animate-none",
+          state === "listening" &&
+            "bg-zinc-700 shadow-[0_0_0_1px_rgba(255,255,255,0.12),0_24px_80px_rgba(40,40,40,0.56),0_0_48px_rgba(255,255,255,0.12)] motion-safe:animate-pulse motion-reduce:animate-none",
+          state === "processing" &&
+            "bg-zinc-700 shadow-[0_0_0_1px_rgba(255,255,255,0.14),0_24px_80px_rgba(32,32,32,0.6),0_0_42px_rgba(255,255,255,0.12)]",
+          state === "speaking" &&
+            "bg-zinc-600 shadow-[0_0_0_1px_rgba(255,255,255,0.14),0_24px_80px_rgba(32,32,32,0.58),0_0_44px_rgba(255,255,255,0.12)] motion-safe:animate-pulse motion-reduce:animate-none",
+          state === "error" &&
+            "bg-zinc-700 shadow-[0_0_0_1px_rgba(255,255,255,0.16),0_24px_80px_rgba(23,23,23,0.6),0_0_42px_rgba(255,255,255,0.1)]",
+        )}
         onClick={handleClick}
         aria-label={
           state === "listening" ? "Stop listening" : "Start listening"
         }
       >
-        <div className="orb-inner" style={{ transform: state === 'listening' ? `scale(${1 + (volume * 0.15)})` : 'scale(1)' }}>
+        <div
+          className={cn(
+            "text-zinc-200 transition-colors duration-200",
+            (state === "listening" || state === "speaking") && "text-zinc-50",
+            state === "error" && "text-zinc-200",
+          )}
+          style={{ transform: state === "listening" ? `scale(${1 + (volume * 0.15)})` : "scale(1)" }}
+        >
           {state === "idle" && <MicIcon />}
           {state === "listening" && <WaveformIcon volume={volume} />}
           {state === "processing" && <SpinnerIcon />}
@@ -111,8 +150,14 @@ export function VoiceOrb({ state, onPress, transcript }: VoiceOrbProps) {
         </div>
       </button>
 
-      {/* State label */}
-      <div className={`orb-label ${state}`}>
+      <div
+        className={cn(
+          "text-sm font-medium tracking-[0.08em]",
+          state === "idle" && "text-zinc-500",
+          (state === "listening" || state === "processing" || state === "speaking" || state === "error") &&
+            "text-zinc-300",
+        )}
+      >
         {state === "idle" && "Tap to speak"}
         {state === "listening" && "Listening..."}
         {state === "processing" && "Thinking..."}
@@ -120,9 +165,10 @@ export function VoiceOrb({ state, onPress, transcript }: VoiceOrbProps) {
         {state === "error" && "Tap to retry"}
       </div>
 
-      {/* Live transcript */}
       {transcript && (state === "listening" || state === "processing") && (
-        <div className="orb-transcript">{transcript}</div>
+        <div className="max-w-[min(320px,88vw)] rounded-[18px] border border-white/10 bg-zinc-900/70 px-4 py-3 text-center leading-6 text-foreground backdrop-blur-xl">
+          {transcript}
+        </div>
       )}
     </div>
   );
@@ -148,7 +194,6 @@ function MicIcon() {
 }
 
 function WaveformIcon({ volume = 1 }: { volume?: number }) {
-  // Use CSS scaleY based on volume multiplier
   return (
     <svg
       width="32"
@@ -160,11 +205,11 @@ function WaveformIcon({ volume = 1 }: { volume?: number }) {
       strokeLinecap="round"
       style={{ transform: `scaleY(${Math.max(0.3, Math.min(volume, 2))})` }}
     >
-      <line x1="4" y1="8" x2="4" y2="16" className="wave-bar wave-1" />
-      <line x1="8" y1="5" x2="8" y2="19" className="wave-bar wave-2" />
-      <line x1="12" y1="3" x2="12" y2="21" className="wave-bar wave-3" />
-      <line x1="16" y1="5" x2="16" y2="19" className="wave-bar wave-4" />
-      <line x1="20" y1="8" x2="20" y2="16" className="wave-bar wave-5" />
+      <line x1="4" y1="8" x2="4" y2="16" className="origin-center animate-pulse motion-reduce:animate-none [animation-delay:0ms]" />
+      <line x1="8" y1="5" x2="8" y2="19" className="origin-center animate-pulse motion-reduce:animate-none [animation-delay:80ms]" />
+      <line x1="12" y1="3" x2="12" y2="21" className="origin-center animate-pulse motion-reduce:animate-none [animation-delay:160ms]" />
+      <line x1="16" y1="5" x2="16" y2="19" className="origin-center animate-pulse motion-reduce:animate-none [animation-delay:240ms]" />
+      <line x1="20" y1="8" x2="20" y2="16" className="origin-center animate-pulse motion-reduce:animate-none [animation-delay:320ms]" />
     </svg>
   );
 }
@@ -179,7 +224,7 @@ function SpinnerIcon() {
       stroke="currentColor"
       strokeWidth="2"
       strokeLinecap="round"
-      className="orb-spinner"
+      className="animate-spin motion-reduce:animate-none"
     >
       <path d="M12 2a10 10 0 0 1 10 10" />
     </svg>
@@ -199,8 +244,11 @@ function SpeakerIcon() {
       strokeLinejoin="round"
     >
       <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" className="speaker-wave-1" />
-      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" className="speaker-wave-2" />
+      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" className="animate-pulse motion-reduce:animate-none" />
+      <path
+        d="M19.07 4.93a10 10 0 0 1 0 14.14"
+        className="animate-pulse motion-reduce:animate-none [animation-delay:180ms]"
+      />
     </svg>
   );
 }

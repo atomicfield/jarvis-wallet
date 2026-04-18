@@ -13,7 +13,6 @@ type AuthContextType = {
   currentUser: User | null;
   loginWithTelegram: (payload: {
     initData: string;
-    managedBotId?: string | null;
   }) => Promise<{ success: boolean; error: string | null }>;
   logout: () => Promise<void>;
   customClaims: ParsedToken | null;
@@ -53,18 +52,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const loginWithTelegram = useCallback(
-    async ({
-      initData,
-      managedBotId,
-    }: {
-      initData: string;
-      managedBotId?: string | null;
-    }) => {
+    async ({ initData }: { initData: string }) => {
       try {
         const response = await fetch("/api/auth/telegram", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ initData, managedBotId }),
+          body: JSON.stringify({ initData }),
         });
         const data = (await response.json()) as {
           customToken?: string;

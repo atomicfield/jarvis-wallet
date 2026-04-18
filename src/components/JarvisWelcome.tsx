@@ -29,34 +29,53 @@ export function JarvisWelcome({
           : "Identity pending";
 
   return (
-    <section className="jarvis-welcome-panel" aria-live="polite">
-      <div className="jarvis-welcome-copy">
-        <span className="jarvis-welcome-eyebrow">Jarvis Voice Wallet</span>
-        <h1 className="jarvis-welcome-title">
+    <section
+      aria-live="polite"
+      className="relative overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/85 p-4 shadow-[0_18px_48px_rgba(0,0,0,0.28)] backdrop-blur-xl"
+    >
+      <div className="relative z-10">
+        <span className="mb-2 inline-flex text-[0.64rem] font-medium tracking-[0.22em] uppercase text-zinc-400">
+          Jarvis Voice Wallet
+        </span>
+        <h1 className="m-0 text-[clamp(1.7rem,8.2vw,2.6rem)] leading-[1.04] font-semibold tracking-[-0.03em]">
           {isReturning ? "Welcome back," : "Welcome,"} {firstName}.
         </h1>
-        <p className="jarvis-welcome-lead">
+        <p className="mt-2 text-[0.95rem] leading-[1.45] font-medium text-foreground">
           {isReturning
             ? "Ready for your next move."
             : "I'm Jarvis, your assistant for secure TON actions."}
         </p>
       </div>
 
-      <div className="jarvis-status-row">
-        <span className={cn("jarvis-status-pill", isTelegram ? "active" : "muted")}>
+      <div className="relative z-10 mt-3 flex flex-wrap gap-2">
+        <span
+          className={cn(
+            "inline-flex min-h-7 items-center justify-center rounded-full border px-2.5 py-1 text-[0.72rem] tracking-[0.02em]",
+            isTelegram
+              ? "border-white/20 bg-white/10 text-zinc-100"
+              : "border-white/10 bg-white/5 text-zinc-400",
+          )}
+        >
           {isTelegram ? "Telegram session" : "Browser preview"}
         </span>
-        <span className={cn("jarvis-status-pill", isWalletReady ? "active" : "pending")}>
+        <span
+          className={cn(
+            "inline-flex min-h-7 items-center justify-center rounded-full border px-2.5 py-1 text-[0.72rem] tracking-[0.02em]",
+            isWalletReady
+              ? "border-white/20 bg-white/10 text-zinc-100"
+              : "border-white/15 bg-white/5 text-zinc-300",
+          )}
+        >
           {isWalletReady ? "Wallet connected" : "Preparing wallet"}
         </span>
         <span
           className={cn(
-            "jarvis-status-pill",
+            "inline-flex min-h-7 items-center justify-center rounded-full border px-2.5 py-1 text-[0.72rem] tracking-[0.02em]",
             authState === "authenticated"
-              ? "active"
+              ? "border-white/20 bg-white/10 text-zinc-100"
               : authState === "error"
-                ? "pending"
-                : "muted",
+                ? "border-white/15 bg-white/5 text-zinc-300"
+                : "border-white/10 bg-white/5 text-zinc-400",
           )}
         >
           {authLabel}
@@ -64,8 +83,8 @@ export function JarvisWelcome({
       </div>
 
       {authError && (
-        <div className="jarvis-presence-row">
-          <p className="jarvis-presence-error">{authError}</p>
+        <div className="relative z-10 mt-2.5">
+          <p className="m-0 text-[0.78rem] leading-[1.4] text-zinc-300">{authError}</p>
         </div>
       )}
     </section>

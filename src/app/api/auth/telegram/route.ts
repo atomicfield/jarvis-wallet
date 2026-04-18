@@ -4,14 +4,17 @@ import { FieldValue } from "firebase-admin/firestore";
 
 import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
 import { requireEnv } from "@/lib/server/env";
-import { decryptSecret } from "@/lib/security/sealedSecrets";
 
-function getManagerBotToken(): string {
-  return (
-    process.env.TELEGRAM_MANAGER_BOT_TOKEN ??
-    process.env.TELEGRAM_BOT_TOKEN ??
-    requireEnv("TELEGRAM_MANAGER_BOT_TOKEN")
-  );
+export const runtime = "nodejs";
+
+const TELEGRAM_HASH_HEX_LENGTH = 64;
+
+function getTelegramBotToken(): string {
+  const token = requireEnv("TELEGRAM_BOT_TOKEN").trim();
+  if (!token) {
+    throw new Error("TELEGRAM_BOT_TOKEN is empty.");
+  }
+  return token;
 }
 
 function computeInitDataHash(initData: string, botToken: string): string {
@@ -37,75 +40,22 @@ function computeInitDataHash(initData: string, botToken: string): string {
 }
 
 function constantTimeEqual(a: string, b: string): boolean {
+  if (
+    a.length !== TELEGRAM_HASH_HEX_LENGTH ||
+    b.length !== TELEGRAM_HASH_HEX_LENGTH ||
+    !/^[a-f0-9]+$/i.test(a) ||
+    !/^[a-f0-9]+$/i.test(b)
+  ) {
+    return false;
+  }
+
   const aBuf = Buffer.from(a, "hex");
   const bBuf = Buffer.from(b, "hex");
   if (aBuf.length !== bBuf.length) return false;
   return crypto.timingSafeEqual(aBuf, bBuf);
 }
 
-/**
- * Verify Telegram Mini App initData by trying up to two bot tokens:
- *   1. The manager bot token (apps launched directly from the manager bot)
- *   2. If a managedBotId is provided and manager token fails, the managed
- *      bot's decrypted token from Firestore (apps launched from a user's
- *      personal managed bot)
- *
- * This dual-token approach is necessary because Telegram signs initData
- * with whichever bot opened the Mini App.
- */
-async function verifyTelegramWebAppData(
-  initData: string,
-  managedBotId?: string | null,
-): Promise<TelegramWebAppUser> {
-  const urlParams = new URLSearchParams(initData);
-  const hash = urlParams.get("hash");
-
-  if (!hash) {
-    throw new Error("Missing Telegram hash.");
-  }
-
-  // Try manager bot token first
-  const managerToken = getManagerBotToken();
-  const managerHash = computeInitDataHash(initData, managerToken);
-
-  if (constantTimeEqual(hash, managerHash)) {
-    return extractUserFromParams(urlParams);
-  }
-
-  // If managedBotId supplied, try that bot's token
-  if (managedBotId) {
-    try {
-      const db = getAdminDb();
-      const botDoc = await db
-        .collection("managedBots")
-        .doc(managedBotId)
-        .get();
-      const encryptedToken = botDoc.get("managedBotTokenEncrypted") as
-        | string
-        | undefined;
-
-      if (encryptedToken) {
-        const managedToken = decryptSecret(encryptedToken);
-        const managedHash = computeInitDataHash(initData, managedToken);
-
-        if (constantTimeEqual(hash, managedHash)) {
-          return extractUserFromParams(urlParams);
-        }
-      }
-    } catch (err) {
-      console.warn(
-        "[TelegramAuth] Managed bot token fallback failed:",
-        err,
-      );
-    }
-  }
-
-  throw new Error("Invalid Telegram init data.");
-}
-
-function extractUserFromParams(
-  urlParams: URLSearchParams,
-): TelegramWebAppUser {
+function extractUserFromParams(urlParams: URLSearchParams): TelegramWebAppUser {
   const userDataString = urlParams.get("user");
   if (!userDataString) {
     throw new Error("Telegram user payload is missing.");
@@ -113,13 +63,28 @@ function extractUserFromParams(
   return JSON.parse(userDataString) as TelegramWebAppUser;
 }
 
+function verifyTelegramWebAppData(initData: string): TelegramWebAppUser {
+  const urlParams = new URLSearchParams(initData);
+  const hash = urlParams.get("hash");
+
+  if (!hash) {
+    throw new Error("Missing Telegram hash.");
+  }
+
+  const botToken = getTelegramBotToken();
+  const expectedHash = computeInitDataHash(initData, botToken);
+
+  if (!constantTimeEqual(hash, expectedHash)) {
+    throw new Error("Invalid Telegram init data.");
+  }
+
+  return extractUserFromParams(urlParams);
+}
+
 export async function POST(request: Request): Promise<Response> {
   try {
-    const body = (await request.json()) as {
-      initData?: string;
-      managedBotId?: string | null;
-    };
-    const { initData, managedBotId } = body;
+    const body = (await request.json()) as { initData?: string };
+    const { initData } = body;
 
     if (!initData) {
       return NextResponse.json(
@@ -128,10 +93,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const telegramUser = await verifyTelegramWebAppData(
-      initData,
-      managedBotId,
-    );
+    const telegramUser = verifyTelegramWebAppData(initData);
     const telegramId = telegramUser.id.toString();
 
     const db = getAdminDb();
