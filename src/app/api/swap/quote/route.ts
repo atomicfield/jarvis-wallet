@@ -21,6 +21,7 @@ import {
 export const runtime = "nodejs";
 
 const QUOTE_TIMEOUT_MS = 9000;
+const BEST_QUOTE_WINDOW_MS = 1200;
 const DEFAULT_OMNISTON_API_URL = "wss://omni-ws.ston.fi";
 
 interface SwapQuoteRequestBody {
@@ -75,17 +76,72 @@ async function requestBestQuote(params: {
   return new Promise((resolve, reject) => {
     let settled = false;
     let subscription: { unsubscribe: () => void } | null = null;
+    let settleTimerId: ReturnType<typeof setTimeout> | null = null;
+    let bestQuoteEvent: QuoteResponseEvent_QuoteUpdated | null = null;
+
+    const pickBestQuote = (
+      current: QuoteResponseEvent_QuoteUpdated | null,
+      candidate: QuoteResponseEvent_QuoteUpdated,
+    ) => {
+      if (!current) {
+        return candidate;
+      }
+
+      try {
+        const currentAsk = BigInt(current.quote.askUnits);
+        const candidateAsk = BigInt(candidate.quote.askUnits);
+        return candidateAsk > currentAsk ? candidate : current;
+      } catch {
+        return candidate;
+      }
+    };
+
+    const resolveBestQuote = () => {
+      if (!bestQuoteEvent) {
+        return false;
+      }
+      finalize();
+      resolve(bestQuoteEvent);
+      return true;
+    };
+
+    const scheduleBestQuoteResolution = () => {
+      if (settleTimerId) {
+        return;
+      }
+
+      settleTimerId = setTimeout(() => {
+        if (settled) {
+          return;
+        }
+
+        if (resolveBestQuote()) {
+          return;
+        }
+
+        finalize();
+        reject(new Error("No swap quote available for this pair right now."));
+      }, BEST_QUOTE_WINDOW_MS);
+    };
+
     const finalize = () => {
       if (!settled) {
         settled = true;
       }
       subscription?.unsubscribe();
+      if (settleTimerId) {
+        clearTimeout(settleTimerId);
+        settleTimerId = null;
+      }
       clearTimeout(timeoutId);
       omniston.close();
     };
 
     const timeoutId = setTimeout(() => {
       if (settled) {
+        return;
+      }
+      if (resolveBestQuote()) {
         return;
       }
       finalize();
@@ -107,18 +163,24 @@ async function requestBestQuote(params: {
           }
 
           if (event.type === QuoteResponseEventType.QuoteUpdated) {
-            finalize();
-            resolve(event);
+            bestQuoteEvent = pickBestQuote(bestQuoteEvent, event);
+            scheduleBestQuoteResolution();
             return;
           }
 
           if (event.type === QuoteResponseEventType.NoQuote) {
+            if (resolveBestQuote()) {
+              return;
+            }
             finalize();
             reject(new Error("No swap quote available for this pair right now."));
             return;
           }
 
           if (event.type === QuoteResponseEventType.Unsubscribed) {
+            if (resolveBestQuote()) {
+              return;
+            }
             finalize();
             reject(new Error("Quote stream ended before a quote was returned."));
           }
