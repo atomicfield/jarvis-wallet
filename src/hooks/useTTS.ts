@@ -8,62 +8,84 @@ interface UseTTSReturn {
   isSpeaking: boolean;
 }
 
-/**
- * Custom hook for text-to-speech using the Web Speech Synthesis API.
- * Auto-selects the best available English voice.
- */
 export function useTTS(): UseTTSReturn {
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
 
   const speak = useCallback((text: string) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    if (typeof window === "undefined") return;
 
-    // Cancel any ongoing speech
-    window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-
-    // Select best voice
-    const voices = window.speechSynthesis.getVoices();
-    const preferredVoice = voices.find(
-      (v) =>
-        v.lang.startsWith("en") &&
-        (v.name.includes("Samantha") ||
-          v.name.includes("Google") ||
-          v.name.includes("Microsoft") ||
-          v.name.includes("Natural")),
-    ) ??
-      voices.find((v) => v.lang.startsWith("en")) ??
-      voices[0];
-
-    if (preferredVoice) {
-      utterance.voice = preferredVoice;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
     }
 
-    utterance.rate = 1.05;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
+    fetch("/api/voice/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    })
+      .then((res) => {
+        if (!res.ok)
+          throw new Error(`TTS request failed: ${res.status} ${res.statusText}`);
+        return res.blob();
+      })
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        objectUrlRef.current = url;
+        const audio = new Audio(url);
+        audioRef.current = audio;
 
-    utterance.onstart = () => {
-      setIsSpeaking(true);
-    };
+        setIsSpeaking(true);
 
-    utterance.onend = () => {
-      setIsSpeaking(false);
-    };
+        audio.onended = () => {
+          setIsSpeaking(false);
+          URL.revokeObjectURL(url);
+          objectUrlRef.current = null;
+        };
+        audio.onerror = () => {
+          console.error(
+            "[TTS] Audio playback error:",
+            audio.error?.message,
+            "code:",
+            audio.error?.code,
+          );
+          setIsSpeaking(false);
+          URL.revokeObjectURL(url);
+          objectUrlRef.current = null;
+        };
 
-    utterance.onerror = () => {
-      setIsSpeaking(false);
-    };
-
-    utteranceRef.current = utterance;
-    window.speechSynthesis.speak(utterance);
+        audio.play().catch((err: unknown) => {
+          console.error(
+            "[TTS] audio.play() rejected (autoplay policy or decode error):",
+            err,
+          );
+          setIsSpeaking(false);
+          URL.revokeObjectURL(url);
+          objectUrlRef.current = null;
+          audioRef.current = null;
+        });
+      })
+      .catch((err: unknown) => {
+        console.error("[TTS] Fetch or blob error:", err);
+        setIsSpeaking(false);
+      });
   }, []);
 
   const stop = useCallback(() => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
     setIsSpeaking(false);
   }, []);
 
