@@ -1,20 +1,29 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import {
+  Onest,
+} from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
+import { AuthProvider } from "@/context/auth";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const onest = Onest({
+  variable: "--font-onest",
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: "variable",
 });
 
 export const metadata: Metadata = {
-  title: "Jarvis Wallet",
-  description: "Voice-first TON DeFi wallet with Telegram managed bots",
+  title: "Jarvis Wallet — Voice-First DeFi Agent Powered Wallet on TON",
+  description:
+    "Your personal AI agent for DeFi on TON. Swap tokens, stake TON, and manage your wallet — all by voice.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#000000",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({
@@ -25,9 +34,18 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${onest.variable} font-sans`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <head>
+        <meta name="color-scheme" content="dark" />
+      </head>
+      <body>
+        <Script
+          src="https://telegram.org/js/telegram-web-app.js?62"
+          strategy="beforeInteractive"
+        />
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }
