@@ -72,13 +72,15 @@ export function useVoice(): UseVoiceReturn {
 
   const setMicTracksEnabled = useCallback((enabled: boolean) => {
     const stream = mediaStreamRef.current;
-    if (!stream) {
-      return;
-    }
+    if (!stream) return;
+    stream.getAudioTracks().forEach((track) => { track.enabled = enabled; });
+  }, []);
 
-    stream.getAudioTracks().forEach((track) => {
-      track.enabled = enabled;
-    });
+  const releaseMicStream = useCallback(() => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
   }, []);
 
   const stopVoiceLevelMeter = useCallback(() => {
@@ -430,7 +432,7 @@ export function useVoice(): UseVoiceReturn {
       };
 
       recorder.onerror = () => {
-        setMicTracksEnabled(false);
+        releaseMicStream();
         silenceAutoStopEnabledRef.current = false;
         clearSilenceTimeout();
         stopVoiceLevelMeter();
@@ -439,7 +441,7 @@ export function useVoice(): UseVoiceReturn {
       };
 
       recorder.onstop = () => {
-        setMicTracksEnabled(false);
+        releaseMicStream();
         silenceAutoStopEnabledRef.current = false;
         clearSilenceTimeout();
         stopVoiceLevelMeter();
@@ -478,6 +480,7 @@ export function useVoice(): UseVoiceReturn {
   }, [
     clearSilenceTimeout,
     mapVoiceError,
+    releaseMicStream,
     setMicTracksEnabled,
     startVoiceLevelMeter,
     stopVoiceLevelMeter,
@@ -560,7 +563,7 @@ export function useVoice(): UseVoiceReturn {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onerror = (event: any) => {
       if (event.error === "aborted" || event.error === "no-speech") {
-        setMicTracksEnabled(false);
+        releaseMicStream();
         stopVoiceLevelMeter();
         setIsListening(false);
         return;
@@ -574,13 +577,13 @@ export function useVoice(): UseVoiceReturn {
       } else {
         console.error("[useVoice]", message);
       }
-      setMicTracksEnabled(false);
+      releaseMicStream();
       stopVoiceLevelMeter();
       setIsListening(false);
     };
 
     recognition.onend = () => {
-      setMicTracksEnabled(false);
+      releaseMicStream();
       stopVoiceLevelMeter();
       setIsListening(false);
       silenceAutoStopEnabledRef.current = false;
@@ -622,6 +625,7 @@ export function useVoice(): UseVoiceReturn {
     finishSpeechFallbackCapture,
     isTranscribing,
     mapVoiceError,
+    releaseMicStream,
     setMicTracksEnabled,
     startMediaRecorderFallback,
     startSpeechFallbackCapture,
@@ -649,14 +653,14 @@ export function useVoice(): UseVoiceReturn {
       }
     } else {
       finishSpeechFallbackCapture(false);
+      releaseMicStream();
     }
     silenceAutoStopEnabledRef.current = false;
     clearSilenceTimeout();
     stopVoiceLevelMeter();
     setIsListening(false);
-    // Haptic feedback when speech stops
     window.Telegram?.WebApp?.HapticFeedback?.impactOccurred("medium");
-  }, [clearSilenceTimeout, finishSpeechFallbackCapture, stopVoiceLevelMeter]);
+  }, [clearSilenceTimeout, finishSpeechFallbackCapture, releaseMicStream, stopVoiceLevelMeter]);
 
   const resetTranscript = useCallback(() => {
     setTranscript("");
