@@ -5,8 +5,8 @@ import Image from "next/image";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { AnimatePresence, motion } from "framer-motion";
-import { Cell, internal, loadStateInit, SendMode } from "@ton/core";
-import { TonClient, WalletContractV4 } from "@ton/ton";
+import { beginCell, Cell, external, internal, loadStateInit, SendMode, storeMessage } from "@ton/core";
+import { WalletContractV4 } from "@ton/ton"; // TonClient removed — seqno/broadcast go via server routes
 import {
   ArrowLeftRight,
   ArrowRight,
@@ -76,7 +76,6 @@ const VOICE_ECHO_GUARD_WINDOW_MS = 8000;
 const SWAP_AUTO_QUOTE_DEBOUNCE_MS = 900;
 const WALLET_STORAGE_TIMEOUT_MS = 5000;
 const WELCOME_STORAGE_TIMEOUT_MS = 3000;
-const TONCENTER_RPC_ENDPOINT = "https://toncenter.com/api/v2/jsonRPC";
 const WALLET_PAGES = [
   { id: "home", label: "Home" },
   { id: "swap", label: "Swap" },
@@ -1459,15 +1458,14 @@ function JarvisApp() {
       throw new Error("Wallet key mismatch. Re-open the app and try again.");
     }
 
-    const tonClient = new TonClient({
-      endpoint: TONCENTER_RPC_ENDPOINT,
-    });
     const wallet = WalletContractV4.create({
       workchain: 0,
       publicKey: restoredWallet.keyPair.publicKey,
     });
-    const openedWallet = tonClient.open(wallet);
-    const seqno = await openedWallet.getSeqno();
+
+    const seqnoRes = await fetch(`/api/ton/seqno?address=${encodeURIComponent(walletAddress)}`);
+    if (!seqnoRes.ok) throw new Error(`Failed to fetch seqno (${seqnoRes.status})`);
+    const { seqno } = await seqnoRes.json() as { seqno: number };
 
     const transferMessages = messages.map((message) => {
       const body = parseCellFromEncoded(message.payload);
@@ -1481,12 +1479,28 @@ function JarvisApp() {
       });
     });
 
-    await openedWallet.sendTransfer({
+    const transfer = wallet.createTransfer({
       seqno,
       secretKey: restoredWallet.keyPair.secretKey,
       sendMode: SendMode.PAY_GAS_SEPARATELY,
       messages: transferMessages,
     });
+
+    const boc = beginCell()
+      .store(storeMessage(external({ to: wallet.address, init: wallet.init, body: transfer })))
+      .endCell()
+      .toBoc()
+      .toString("base64");
+
+    const broadcastRes = await fetch("/api/ton/broadcast", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ boc }),
+    });
+    if (!broadcastRes.ok) {
+      const err = await broadcastRes.json().catch(() => ({})) as { error?: string };
+      throw new Error(err.error ?? `Broadcast failed (${broadcastRes.status})`);
+    }
   }, [walletAddress]);
 
   const handleSwapExecution = useCallback(async () => {

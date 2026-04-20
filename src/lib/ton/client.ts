@@ -1,30 +1,25 @@
 import "server-only";
 
-import { TonClient, Address, fromNano } from "@ton/ton";
+import { fromNano } from "@ton/ton";
 
 import { requireEnv } from "@/lib/server/env";
 
-let clientInstance: TonClient | null = null;
-
-export function getTonClient(): TonClient {
-  if (clientInstance) return clientInstance;
-
+function tonApiHeaders() {
   const apiKey = requireEnv("TONAPI_KEY");
-  clientInstance = new TonClient({
-    endpoint: "https://toncenter.com/api/v2/jsonRPC",
-    apiKey,
-  });
-
-  return clientInstance;
+  return { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
 }
 
 /**
  * Get balance of a TON wallet address in nanotons (raw).
  */
 export async function getBalance(address: string): Promise<bigint> {
-  const client = getTonClient();
-  const addr = Address.parse(address);
-  return client.getBalance(addr);
+  const response = await fetch(
+    `https://tonapi.io/v2/accounts/${encodeURIComponent(address)}`,
+    { headers: tonApiHeaders(), cache: "no-store" },
+  );
+  if (!response.ok) throw new Error(`TonAPI account request failed: ${response.status}`);
+  const data = await response.json() as { balance?: number | string };
+  return BigInt(data.balance ?? 0);
 }
 
 /**
@@ -49,17 +44,9 @@ export async function getJettonBalances(
     jettonAddress: string;
   }>
 > {
-  const apiKey = requireEnv("TONAPI_KEY");
-
   const response = await fetch(
     `https://tonapi.io/v2/accounts/${encodeURIComponent(address)}/jettons`,
-    {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      cache: "no-store",
-    },
+    { headers: tonApiHeaders(), cache: "no-store" },
   );
 
   if (!response.ok) {
