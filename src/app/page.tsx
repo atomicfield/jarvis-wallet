@@ -73,6 +73,7 @@ const FIRST_TIME_INTRO_INTERVAL_MS = 3000;
 const VOICE_AUTO_RESUME_DELAY_MS = 1300;
 const VOICE_POST_SPEECH_COOLDOWN_MS = 1800;
 const VOICE_ECHO_GUARD_WINDOW_MS = 8000;
+const SWAP_AUTO_QUOTE_DEBOUNCE_MS = 900;
 const WALLET_STORAGE_TIMEOUT_MS = 5000;
 const WELCOME_STORAGE_TIMEOUT_MS = 3000;
 const TONCENTER_RPC_ENDPOINT = "https://toncenter.com/api/v2/jsonRPC";
@@ -323,13 +324,24 @@ function withTimeout<T>(
   });
 }
 
-function parseCellFromHex(rawHex?: string): Cell | undefined {
-  const hex = rawHex?.trim();
-  if (!hex) {
+function parseCellFromEncoded(rawCell?: string): Cell | undefined {
+  const serialized = rawCell?.trim();
+  if (!serialized) {
     return undefined;
   }
 
-  return Cell.fromHex(hex);
+  const normalizedBase64 = serialized.replace(/-/g, "+").replace(/_/g, "/");
+  try {
+    return Cell.fromBase64(normalizedBase64);
+  } catch {
+    // Fall back to hex parsing for providers that return BOC in hex.
+  }
+
+  if (/^[0-9a-f]+$/i.test(serialized) && serialized.length % 2 === 0) {
+    return Cell.fromHex(serialized);
+  }
+
+  throw new Error("Swap message payload is not a valid TON cell.");
 }
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
@@ -387,6 +399,11 @@ function isLikelySpeechEcho(transcript: string, spokenText: string): boolean {
 
   const overlapRatio = sharedCount / Math.min(transcriptSet.size, spokenSet.size);
   return overlapRatio >= 0.65;
+}
+
+function isValidSwapAmountInput(value: string): boolean {
+  const trimmed = value.trim();
+  return /^[0-9]+(\.[0-9]+)?$/.test(trimmed) && Number(trimmed) > 0;
 }
 
 function InitialLoader() {
@@ -584,6 +601,8 @@ function JarvisApp() {
   const [stakeOverview, setStakeOverview] = useState<StakeOverviewResponse | null>(null);
   const [stakeLoading, setStakeLoading] = useState(false);
   const [stakeError, setStakeError] = useState<string | null>(null);
+  const [stakeExecuting, setStakeExecuting] = useState(false);
+  const [stakeSuccess, setStakeSuccess] = useState<string | null>(null);
   const [stakeAmountInput, setStakeAmountInput] = useState("10");
   const [seedPhraseWords, setSeedPhraseWords] = useState<string[] | null>(null);
   const [seedPhraseVisible, setSeedPhraseVisible] = useState(false);
@@ -1412,13 +1431,16 @@ function JarvisApp() {
     if (!selectedSwapFrom || !selectedSwapTo || !swapAmount.trim()) {
       return;
     }
+    if (!isValidSwapAmountInput(swapAmount)) {
+      return;
+    }
     if (selectedSwapFrom.symbol === selectedSwapTo.symbol) {
       return;
     }
 
     const timeoutId = window.setTimeout(() => {
       void handleSwapQuote();
-    }, 380);
+    }, SWAP_AUTO_QUOTE_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timeoutId);
   }, [handleSwapQuote, selectedSwapFrom, selectedSwapTo, swapAmount, walletPage]);
@@ -1449,8 +1471,8 @@ function JarvisApp() {
     const seqno = await openedWallet.getSeqno();
 
     const transferMessages = messages.map((message) => {
-      const body = parseCellFromHex(message.payload);
-      const stateInitCell = parseCellFromHex(message.jettonWalletStateInit);
+      const body = parseCellFromEncoded(message.payload);
+      const stateInitCell = parseCellFromEncoded(message.jettonWalletStateInit);
 
       return internal({
         to: message.targetAddress,
@@ -1514,6 +1536,52 @@ function JarvisApp() {
       setSwapExecuting(false);
     }
   }, [sendTonMessages, swapQuote, walletAddress]);
+
+  const handleStakeExecution = useCallback(async () => {
+    if (!walletAddress) {
+      setStakeError("Wallet is not ready yet.");
+      return;
+    }
+
+    if (!stakeAmountIsValid) {
+      setStakeError("Enter a valid stake amount.");
+      return;
+    }
+
+    setStakeExecuting(true);
+    setStakeError(null);
+    setStakeSuccess(null);
+
+    try {
+      const executionResponse = await fetch("/api/stake/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amountTon: stakeAmountInput,
+          walletAddress,
+        }),
+      });
+
+      const executionPayload = (await executionResponse.json()) as unknown;
+      if (!executionResponse.ok) {
+        throw new Error(readApiError(executionPayload, "Failed to prepare stake execution."));
+      }
+
+      const execution = executionPayload as { messages?: SwapExecuteMessage[] };
+      if (!Array.isArray(execution.messages) || execution.messages.length === 0) {
+        throw new Error("No execution messages were returned.");
+      }
+
+      await sendTonMessages(execution.messages);
+      setStakeSuccess("Stake submitted on-chain. It may take a minute to process.");
+    } catch (error) {
+      setStakeError(
+        error instanceof Error ? error.message : "Failed to submit stake transaction.",
+      );
+    } finally {
+      setStakeExecuting(false);
+    }
+  }, [sendTonMessages, stakeAmountInput, stakeAmountIsValid, walletAddress]);
 
   const flipSwapPair = useCallback(() => {
     setSwapFromSymbol((currentFrom) => {
@@ -2094,22 +2162,22 @@ function JarvisApp() {
             <Button
               type="button"
               className="mt-3 h-11 w-full rounded-xl bg-white text-zinc-900 hover:bg-zinc-100"
-              disabled={!stakeAmountIsValid}
-              onClick={() => {
-                setWalletPage("home");
-                setHomeMode("chat");
-                sendMessage({
-                  text: `I want to stake ${stakeAmountInput} TON. Walk me through the safest way and required steps.`,
-                });
-              }}
+              disabled={stakeExecuting || !stakeAmountIsValid || stakeLoading}
+              onClick={handleStakeExecution}
             >
-              Continue with staking assistant
+              {stakeExecuting ? "Submitting stake..." : "Stake now"}
             </Button>
           </div>
 
           {stakeError && (
             <div className="mt-3 rounded-xl border border-rose-300/30 bg-rose-900/20 px-3 py-2 text-sm text-rose-200">
               {stakeError}
+            </div>
+          )}
+
+          {stakeSuccess && (
+            <div className="mt-3 rounded-xl border border-emerald-300/30 bg-emerald-900/20 px-3 py-2 text-sm text-emerald-200">
+              {stakeSuccess}
             </div>
           )}
 
