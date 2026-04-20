@@ -1024,8 +1024,13 @@ function JarvisApp() {
   const activeSwapTokens = swapTokens.length > 0 ? swapTokens : FALLBACK_SWAP_TOKENS;
   const selectedSwapFrom = activeSwapTokens.find((token) => token.symbol === swapFromSymbol) ?? null;
   const selectedSwapTo = activeSwapTokens.find((token) => token.symbol === swapToSymbol) ?? null;
+  
+  const currentTonBalance = Number(walletSummary?.totalTon ?? walletBalance ?? "0");
+  const isBalanceTooLowForStake = walletSummary !== null && currentTonBalance < 1;
   const numericStakeAmount = Number(stakeAmountInput);
-  const stakeAmountIsValid = Number.isFinite(numericStakeAmount) && numericStakeAmount > 0;
+  const stakeAmountExceedsBalance = numericStakeAmount > currentTonBalance;
+  const stakeAmountTooLow = numericStakeAmount > 0 && numericStakeAmount < 1;
+  const stakeAmountIsValid = Number.isFinite(numericStakeAmount) && numericStakeAmount >= 1 && !stakeAmountExceedsBalance && !isBalanceTooLowForStake;
   const numericStakeApy = stakeOverview?.apy ? Number.parseFloat(stakeOverview.apy) : 0;
   const estimatedYearlyRewards = stakeAmountIsValid && Number.isFinite(numericStakeApy)
     ? (numericStakeAmount * numericStakeApy) / 100
@@ -2203,6 +2208,21 @@ function JarvisApp() {
               <p>Estimated tsTON: {estimatedTsTon.toFixed(4)}</p>
               <p className="text-right">Projected yearly rewards: {estimatedYearlyRewards.toFixed(4)} TON</p>
             </div>
+
+          {isBalanceTooLowForStake ? (
+            <div className="mt-2 text-xs text-rose-300">
+              Your balance is under 1 TON, which is the minimum required to stake.
+            </div>
+          ) : stakeAmountExceedsBalance ? (
+            <div className="mt-2 text-xs text-rose-300">
+              Amount exceeds your current balance.
+            </div>
+          ) : stakeAmountTooLow ? (
+            <div className="mt-2 text-xs text-rose-300">
+              Minimum stake amount is 1 TON.
+            </div>
+          ) : null}
+
             <Button
               type="button"
               className="mt-3 h-11 w-full rounded-xl bg-white text-zinc-900 hover:bg-zinc-100"
