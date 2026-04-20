@@ -15,6 +15,7 @@ import {
   MessageCircle,
   Mic,
   MicOff,
+  RefreshCw,
   TrendingUp,
 } from "lucide-react";
 
@@ -1541,6 +1542,7 @@ function JarvisApp() {
 
       await sendTonMessages(execution.messages);
       setSwapSuccess("Swap submitted on-chain. Track your balance for settlement.");
+      setWalletSummaryReloadKey((current) => current + 1);
     } catch (error) {
       setSwapError(
         error instanceof Error ? error.message : "Failed to submit swap transaction.",
@@ -1587,6 +1589,7 @@ function JarvisApp() {
 
       await sendTonMessages(execution.messages);
       setStakeSuccess("Stake submitted on-chain. It may take a minute to process.");
+      setWalletSummaryReloadKey((current) => current + 1);
     } catch (error) {
       setStakeError(
         error instanceof Error ? error.message : "Failed to submit stake transaction.",
@@ -1666,6 +1669,22 @@ function JarvisApp() {
 
       {walletPage === "home" && homeMode === "overview" && (
         <>
+          <div className="relative z-10 mb-1 flex justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 px-2 text-[0.72rem] text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
+              onClick={() => {
+                setWalletSummary(null);
+                setWalletSummaryReloadKey((current) => current + 1);
+              }}
+              disabled={Boolean(walletAddress) && walletSummary === null}
+            >
+              <RefreshCw className={cn("size-3", Boolean(walletAddress) && walletSummary === null && "animate-spin")} />
+              Refresh balance
+            </Button>
+          </div>
           <AssetOverview
             address={walletAddress}
             totalUsd={walletSummary?.totalUsd ?? null}
