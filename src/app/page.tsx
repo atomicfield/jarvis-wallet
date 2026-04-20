@@ -619,6 +619,7 @@ function JarvisApp() {
   const [importWalletError, setImportWalletError] = useState<string | null>(null);
   const [importWalletSuccess, setImportWalletSuccess] = useState<string | null>(null);
   const [walletSummaryReloadKey, setWalletSummaryReloadKey] = useState(0);
+  const [isSummaryRefreshing, setIsSummaryRefreshing] = useState(false);
 
   const {
     transcript,
@@ -715,7 +716,8 @@ function JarvisApp() {
     }
 
     let active = true;
-    console.log("[Summary] Fetching for:", walletAddress);
+    const isInitialLoad = walletSummary === null;
+    if (!isInitialLoad) setIsSummaryRefreshing(true);
 
     void (async () => {
       try {
@@ -727,30 +729,34 @@ function JarvisApp() {
         }
 
         const summary = (await response.json()) as WalletSummary;
-        if (!active) {
-          return;
-        }
+        if (!active) return;
 
         setWalletBalance(summary.totalTon ?? null);
         setWalletSummary(summary);
       } catch (error) {
-        if (!active) {
-          return;
-        }
+        if (!active) return;
         console.error("[Wallet] Failed to load wallet summary:", error);
         setWalletBalance(null);
-        setWalletSummary({
-          totalUsd: null,
-          totalTon: null,
-          assets: [],
-        });
+        setWalletSummary((prev) => prev ?? { totalUsd: null, totalTon: null, assets: [] });
+      } finally {
+        if (active) setIsSummaryRefreshing(false);
       }
     })();
 
     return () => {
       active = false;
     };
-  }, [walletAddress, walletSummaryReloadKey]);
+  }, [walletAddress, walletSummaryReloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const refreshSummary = useCallback(() => {
+    setWalletSummaryReloadKey((k) => k + 1);
+  }, []);
+
+  useEffect(() => {
+    if (!walletAddress) return;
+    const interval = window.setInterval(refreshSummary, 30_000);
+    return () => window.clearInterval(interval);
+  }, [walletAddress, refreshSummary]);
 
   useEffect(() => {
     let active = true;

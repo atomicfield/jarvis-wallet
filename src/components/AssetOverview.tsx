@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -25,6 +26,8 @@ interface AssetOverviewProps {
   totalTon: string | null;
   assets: AssetItem[];
   isLoading: boolean;
+  isRefreshing?: boolean;
+  onRefresh?: () => void;
 }
 
 export function AssetOverview({
@@ -33,6 +36,8 @@ export function AssetOverview({
   totalTon,
   assets,
   isLoading,
+  isRefreshing = false,
+  onRefresh,
 }: AssetOverviewProps) {
   const [copied, setCopied] = useState(false);
   const displayUsd = totalUsd ?? "0.00";
@@ -58,9 +63,24 @@ export function AssetOverview({
     <section className="relative z-10 rounded-2xl border border-white/10 bg-zinc-950/88 p-4 shadow-[0_18px_48px_rgba(0,0,0,0.34)] backdrop-blur-xl">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[0.64rem] font-medium tracking-[0.2em] text-zinc-500">
-            Total assets
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-[0.64rem] font-medium tracking-[0.2em] text-zinc-500">
+              Total assets
+            </p>
+            {onRefresh && (
+              <button
+                onClick={onRefresh}
+                disabled={isRefreshing || isLoading}
+                className="text-zinc-500 transition-colors hover:text-zinc-300 disabled:opacity-40"
+                aria-label="Refresh balance"
+              >
+                <RotateCw
+                  size={11}
+                  className={isRefreshing ? "animate-spin" : ""}
+                />
+              </button>
+            )}
+          </div>
           {isLoading ? (
             <div className="mt-1 space-y-2">
               <Skeleton className="h-10 w-36 bg-zinc-800/70" />
